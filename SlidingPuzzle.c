@@ -316,6 +316,11 @@ const uint16_t full_ghost[220][220] = {
 
 #define FALSE 0
 #define TRUE 1
+
+#define UP 0
+#define RIGHT 1
+#define LEFT 2
+#define DOWN 3
     
 volatile int pixel_buffer_start; // global variable
 void clear_screen();
@@ -323,10 +328,12 @@ void plot_pixel(int x, int y, short int line_colour);
 void plot_character(int x, int y, char ASCII_code);
 void draw_line(int x0, int y0, int x1, int y1, short int line_colour);
 void swap(int *xp, int *yp);
-void draw_subsquare(int square);
+void draw_subsquare(int square, int board_position);
 void moveBoard(int moveDirection);
 
-int board[4][4] = {{0, 1, 2, 3}, {4, 5, 6, 7}, {8, 9, 10, 11}, {12, 13, 14, 15}};
+//Board variables
+int board[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+int blankIndex = 15;//Index of blank square
 
 
 int main(){
@@ -336,14 +343,14 @@ int main(){
     /* Read location of the pixel buffer from the pixel buffer controller */
     pixel_buffer_start = *pixel_ctrl_ptr;
     clear_screen();
-    
+	
+	moveBoard(DOWN);
+	moveBoard(RIGHT);
     //draws the image on the grid
-    for(int i = 0; i < NUM_SQUARES; i++) {
-        for(int j = 0; j < NUM_SQUARES; j++) {
-            draw_subsquare(board[i][j]);
-        }
+    for(int i = 0; i < NUM_SQUARES*NUM_SQUARES; i++) {
+		draw_subsquare(board[i], i);
     }
-            
+	
     //draws the grid lines
     for(int i = 0; i < 5; i++){
         draw_line(50+i*55, 10, 50+i*55, 230, BLACK);
@@ -419,19 +426,21 @@ void swap(int *xp, int *yp) {
     *yp = temp;
 }
 
-void draw_subsquare(int square) {
+void draw_subsquare(int square, int board_position) {
     
-    int square_offset_X = (square % 4) * SQUARE_SIZE;
-    int square_offset_Y = (square / 4) * SQUARE_SIZE;
-
-    
+	//Square is the part of the image, board_position is the location of the image to be placed
+    int square_offset_X = (square % NUM_SQUARES) * SQUARE_SIZE;
+    int square_offset_Y = (square / NUM_SQUARES) * SQUARE_SIZE;
+	int screen_offset_X = (board_position % NUM_SQUARES) * SQUARE_SIZE;
+	int screen_offset_Y = (board_position / NUM_SQUARES) * SQUARE_SIZE;
+	
     for(int i = 0; i < SQUARE_SIZE; i++) {
         for(int j = 0; j < SQUARE_SIZE; j++) {
             if(square == 15) {
-                plot_pixel(j+square_offset_X+50, i+square_offset_Y+10, BLACK);
+                plot_pixel(j+screen_offset_X+50, i+screen_offset_Y+10, BLACK);
             }
             else {
-                plot_pixel(j+square_offset_X+50, i+square_offset_Y+10, full_ghost[i+square_offset_Y][j+square_offset_X]);
+                plot_pixel(j+screen_offset_X+50, i+screen_offset_Y+10, full_ghost[i+square_offset_Y][j+square_offset_X]);
             }
         }
     }
@@ -441,12 +450,40 @@ void draw_subsquare(int square) {
     
 void moveBoard(int moveDirection) {
     
-    //moving up = 0
-    //moving right = 1
-    //moving down = 2
-    //moving left = 3
-    
-    //if(moveDirection == 2)
+    if(moveDirection == UP) {
+		//Check that blank is not on last row
+		if(blankIndex <= NUM_SQUARES*NUM_SQUARES-NUM_SQUARES-1) {
+			swap(&board[blankIndex] , &board[blankIndex+NUM_SQUARES]);
+			blankIndex = blankIndex+NUM_SQUARES;
+		
+		}
+	}
+	
+	else if(moveDirection == RIGHT) {
+		//Check that blank is not on first column
+		if(blankIndex % NUM_SQUARES != 0) {
+			swap(&board[blankIndex] , &board[blankIndex-1]);
+			blankIndex = blankIndex-1;
+		}
+	}
+	
+	else if(moveDirection == LEFT) {
+		//Check that blank is not on last column
+		if(blankIndex% NUM_SQUARES != NUM_SQUARES-1) {
+			swap(&board[blankIndex] , &board[blankIndex+1]); 
+			blankIndex = blankIndex+1;
+		}
+	}
+	
+	else if(moveDirection == DOWN){
+		//Check that blank is not on the first row
+		if(blankIndex >= NUM_SQUARES){
+			swap(&board[blankIndex] , &board[blankIndex-NUM_SQUARES]);
+			blankIndex = blankIndex-NUM_SQUARES;
+		}
+	}
+	
+	
     
     
 }
