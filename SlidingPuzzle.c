@@ -336,10 +336,7 @@ void swap(int *xp, int *yp);
 void draw_subsquare(int square, int board_position);
 void moveBoard(int moveDirection);
 void draw_board();
-//void keyboardArrows();
-//void configure_ps2_port();
-//void ps2_port_IRQ(int PS2_ptr );
-//void __attribute__((interrupt)) __cs3_isr_irq(void);
+void KEY_ISR();
 
 //Board variables
 int board[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
@@ -355,42 +352,31 @@ void config_interrupt(int N, int CPU_target);
 
 
 int main(){
-    
+	
     disable_A9_interrupts();
     set_A9_IRQ_stack();// initialize the stack pointer for IRQ mode
     config_GIC();// configure the general interrupt controller
     config_PS2();
+	config_KEY();
     enable_A9_interrupts();// enable interrupts
     
+	
+	
     volatile int * pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL_BASE;
     volatile int * char_ctrl_ptr = (int *)CHAR_BUF_CTRL_BASE;
-    /* Read location of the pixel buffer from the pixel buffer controller */
+    //Read location of the pixel buffer from the pixel buffer controller
     pixel_buffer_start = *pixel_ctrl_ptr;
     clear_screen();
-    
-    
-    //moveBoard(DOWN);
-    //moveBoard(RIGHT);
-    //draws the image on the grid
-    /*for(int i = 0; i < NUM_SQUARES*NUM_SQUARES; i++) {
-        draw_subsquare(board[i], i);
-    }
-    //draws the grid lines
-    for(int i = 0; i < 5; i++){
-        draw_line(50+i*55, 10, 50+i*55, 230, BLACK);
-        draw_line(50, 10+i*55, 270, 10+i*55, BLACK);
-    }*/
-    
-    
+	printf("Hola");
+	
     
     while(1) {
-        //printf("A");
-        if(draw) {
-            draw_board();
-            draw = FALSE;
-        }
+        //if(draw) {
+            //draw_board();
+            //draw = FALSE;
+        //}
     }
-    
+	
 }
 
 void draw_board() {
@@ -522,54 +508,41 @@ void moveBoard(int moveDirection) {
             blankIndex = blankIndex-NUM_SQUARES;
         }
     }
+} 
+
+void KEY_ISR() {
+	
+	volatile int* KEY_ptr = (int*) KEY_BASE;
+	int move = 0; 
+	
+	switch(*(KEY_ptr + 3)){ // Get edgecapture bits (could take log base 2);
+		case 1: move = 0;
+				break;
+		case 2:	move = 1;
+				break;
+		case 4: move = 2;
+				break;
+		case 8: move = 3;
+				break;
+		default: break; 
+			
+	}
+	
+	moveBoard(move);
+	draw = TRUE; // Set draw flag to true
+	*(KEY_ptr + 3) = *(KEY_ptr + 3); // Reset edgecapture	
 }
 
-/*void keyboardArrows() {
-    
-    volatile int * PS2_ptr = (int *)PS2_BASE;
-    int PS2_data, RVALID;
-    char byte1 = 0, byte2 = 0, byte3 = 0, byte4 = 0;
-    *(PS2_ptr) = 0xFF; // reset
-    while (1) {
-        PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
-        RVALID = PS2_data & 0x8000; // extract the RVALID field
-        if (RVALID) {
-            byte1 = byte2;
-            byte2 = byte3;
-            byte3 = byte4;
-            byte4 = PS2_data & 0XFF;
-        }
-    }
-    
-    //move or break code?
-    if(byte1 == (char)0x75) {//this goes up
-        moveDirection(UP);
-    }
-    if(byte2 == (char)0x6B) {//this goes to the left
-        moveDirection(LEFT);
-    }
-    if(byte3 == (char)0x72) {//this goes down
-        moveDirection(DOWN);
-    }
-    if(byte4 == (char)0x74) {//this goes to the right
-        moveDirection(RIGHT);
-    }
-}*/
 
-void PS2_ISR(){
-    
+void PS2_ISR() {
+    printf("service");
     draw = TRUE;
     unsigned char byte = 0;
 
-    printf("bebe");
     volatile int *PS2_ptr = (int *)0xFF200100;
     int PS2_data, RVALID;
     PS2_data = *(PS2_ptr);// read the Data register in the PS/2 port
     RVALID = (PS2_data & 0x8000);// extract the RVALID field
-
-    int interruptReg;
-    interruptReg = *(PS2_ptr + 1);
-    *(PS2_ptr + 1) = interruptReg;
 
     if (RVALID != 0) {
         byte = PS2_data & 0xFF;
@@ -583,22 +556,37 @@ void PS2_ISR(){
             return;
         }
     }
+	
+	int interruptReg;
+    interruptReg = *(PS2_ptr + 1);
+    *(PS2_ptr + 1) = interruptReg;
+	
 }
 
 /* setup the PS/2 interrupts in the FPGA */
 void config_PS2() {
-    volatile int * PS2_ptr = (int *) 0xFF200100; // PS/2 base address
+	printf("configure");
+	volatile int * PS2_ptr = (int *) 0xFF200100; // PS/2 base address
     *(PS2_ptr + 1) = 0x00000001; // set RE to 1 to enable interrupts
+}
+
+void config_KEY() {
+	volatile int* KEY_ptr = (int*) KEY_BASE;
+	*(KEY_ptr + 2) = 0xF; // Reset interrupt mask to allow for interrupts
 }
 
 // Define the IRQ exception handler
 void __attribute__((interrupt)) __cs3_isr_irq(void) {
-    // Read the ICCIAR from the CPU Interface in the GIC
+    
+	// Read the ICCIAR from the CPU Interface in the GIC
     int interrupt_ID = *((int *)0xFFFEC10C);
-    if (interrupt_ID == 79) // check if interrupt is from the KEYs
-    PS2_ISR();
+    if (interrupt_ID == 79) // check if interrupt is from the keyboard
+    	PS2_ISR();
+	else if(interrupt_ID == 73) // check if interrupt is from KEYs
+		KEY_ISR();
     else
-    while (1); // if unexpected, then stay here
+    	while (1); // if unexpected, then stay here
+	
     // Write to the End of Interrupt Register (ICCEOIR)
     *((int *)0xFFFEC110) = interrupt_ID;
 }
@@ -660,7 +648,8 @@ void disable_A9_interrupts(void) {
 * Configure the Generic Interrupt Controller (GIC)
 */
 void config_GIC() {
-    config_interrupt (79, 1); // configure the FPGA KEYs interrupt (73)
+	config_interrupt (79, 1);
+    //config_interrupt (73, 1); // configure the FPGA KEYs interrupt (73)
     // Set Interrupt Priority Mask Register (ICCPMR). Enable interrupts of all
     // priorities
     *((int *) 0xFFFEC104) = 0xFFFF;
@@ -701,104 +690,4 @@ void config_interrupt(int N, int CPU_target) {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-void __attribute__((interrupt)) __cs3_isr_irq(void) {
-    
-    // Read the ICCIAR from the processor interface
-    int address = MPCORE_GIC_CPUIF + ICCIAR;
-    int int_ID = *((int *)address);
-    if( int_ID == PS2_PORT_ID)
-        configure_ps2_port();
-    
-    //else if (int_ID == INTERVAL_TIMER_IRQ) // check if interrupt is from the Altera timer
-    //    interval_timer_ISR();
-    //else if (int_ID == KEYS_IRQ) // check if interrupt is from the KEYs
-    //    pushbutton_ISR();
-    else
-        while (1)
-        ; // if unexpected, then stay here
-    // Write to the End of Interrupt Register (ICCEOIR)
-    address = MPCORE_GIC_CPUIF + ICCEOIR;
-    *((int *)address) = int_ID;
-    return;
-}
-    
-void configure_ps2_port() {
-    volatile int * PS2_ptr = (int *)PS2_BASE;
-    int PS2_data, RVALID;
-    PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
-    RVALID = PS2_data & 0x8000; // extract the RVALID field
-}
-
-void ps2_port_IRQ(int PS2_ptr) {
-    
-    char byte1 = 0, byte2 = 0, byte3 = 0, byte4 = 0;
-    //*(PS2_ptr) = 0xFF; // reset
-    
-    //move or break code????
-    if(byte1 == (char)0x75) {//this goes up
-        moveDirection(UP);
-    }
-    else if(byte2 == (char)0x6B) {//this goes to the left
-        moveDirection(LEFT);
-    }
-    else if(byte3 == (char)0x72) {//this goes down
-        moveDirection(DOWN);
-    }
-    else if(byte4 == (char)0x74) {//this goes to the right
-        moveDirection(RIGHT);
-    }
-}*/
-
-
-    
-
-    
-
-    
-
-
-    
-    
-
-
-    
-
-    
-
-
-    
-    
-
-    
-    
-    
+	
