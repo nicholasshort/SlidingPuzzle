@@ -308,7 +308,10 @@ const uint16_t full_ghost[220][220] = {
 #define RESOLUTION_Y 240
 #define CHARACTER_X 80
 #define CHARACTER_Y 60
-
+    
+/* ID for the  input/output devices */
+#define PS2_PORT_ID 79
+#define ENABLE 0xFFFF
     
 /* Constants for animation */
 #define BOX_LEN 2
@@ -323,6 +326,8 @@ const uint16_t full_ghost[220][220] = {
 #define DOWN 3
     
 volatile int pixel_buffer_start; // global variable
+bool draw = TRUE;
+
 void clear_screen();
 void plot_pixel(int x, int y, short int line_colour);
 void plot_character(int x, int y, char ASCII_code);
@@ -330,36 +335,75 @@ void draw_line(int x0, int y0, int x1, int y1, short int line_colour);
 void swap(int *xp, int *yp);
 void draw_subsquare(int square, int board_position);
 void moveBoard(int moveDirection);
+void draw_board();
+//void keyboardArrows();
+//void configure_ps2_port();
+//void ps2_port_IRQ(int PS2_ptr );
+//void __attribute__((interrupt)) __cs3_isr_irq(void);
 
 //Board variables
 int board[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 int blankIndex = 15;//Index of blank square
 
+void PS2_ISR();
+void config_PS2();
+void set_A9_IRQ_stack();
+void enable_A9_interrupts();
+void disable_A9_interrupts();
+void config_GIC();
+void config_interrupt(int N, int CPU_target);
+
 
 int main(){
+    
+    disable_A9_interrupts();
+    set_A9_IRQ_stack();// initialize the stack pointer for IRQ mode
+    config_GIC();// configure the general interrupt controller
+    config_PS2();
+    enable_A9_interrupts();// enable interrupts
     
     volatile int * pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL_BASE;
     volatile int * char_ctrl_ptr = (int *)CHAR_BUF_CTRL_BASE;
     /* Read location of the pixel buffer from the pixel buffer controller */
     pixel_buffer_start = *pixel_ctrl_ptr;
     clear_screen();
-	
-	moveBoard(DOWN);
-	moveBoard(RIGHT);
+    
+    
+    //moveBoard(DOWN);
+    //moveBoard(RIGHT);
     //draws the image on the grid
-    for(int i = 0; i < NUM_SQUARES*NUM_SQUARES; i++) {
-		draw_subsquare(board[i], i);
+    /*for(int i = 0; i < NUM_SQUARES*NUM_SQUARES; i++) {
+        draw_subsquare(board[i], i);
     }
-	
+    //draws the grid lines
+    for(int i = 0; i < 5; i++){
+        draw_line(50+i*55, 10, 50+i*55, 230, BLACK);
+        draw_line(50, 10+i*55, 270, 10+i*55, BLACK);
+    }*/
+    
+    
+    
+    while(1) {
+        //printf("A");
+        if(draw) {
+            draw_board();
+            draw = FALSE;
+        }
+    }
+    
+}
+
+void draw_board() {
+    
+    //draws the board
+     for(int i = 0; i < NUM_SQUARES*NUM_SQUARES; i++) {
+        draw_subsquare(board[i], i);
+    }
     //draws the grid lines
     for(int i = 0; i < 5; i++){
         draw_line(50+i*55, 10, 50+i*55, 230, BLACK);
         draw_line(50, 10+i*55, 270, 10+i*55, BLACK);
     }
-    
-    
-    
-
 }
 
 void clear_screen() {
@@ -369,8 +413,6 @@ void clear_screen() {
         }
     }
 }
-
-
 
 
 //provides template for the address of the pixel.
@@ -428,12 +470,12 @@ void swap(int *xp, int *yp) {
 
 void draw_subsquare(int square, int board_position) {
     
-	//Square is the part of the image, board_position is the location of the image to be placed
+    //Square is the part of the image, board_position is the location of the image to be placed
     int square_offset_X = (square % NUM_SQUARES) * SQUARE_SIZE;
     int square_offset_Y = (square / NUM_SQUARES) * SQUARE_SIZE;
-	int screen_offset_X = (board_position % NUM_SQUARES) * SQUARE_SIZE;
-	int screen_offset_Y = (board_position / NUM_SQUARES) * SQUARE_SIZE;
-	
+    int screen_offset_X = (board_position % NUM_SQUARES) * SQUARE_SIZE;
+    int screen_offset_Y = (board_position / NUM_SQUARES) * SQUARE_SIZE;
+    
     for(int i = 0; i < SQUARE_SIZE; i++) {
         for(int j = 0; j < SQUARE_SIZE; j++) {
             if(square == 15) {
@@ -444,57 +486,319 @@ void draw_subsquare(int square, int board_position) {
             }
         }
     }
-    
 }
 
     
 void moveBoard(int moveDirection) {
     
     if(moveDirection == UP) {
-		//Check that blank is not on last row
-		if(blankIndex <= NUM_SQUARES*NUM_SQUARES-NUM_SQUARES-1) {
-			swap(&board[blankIndex] , &board[blankIndex+NUM_SQUARES]);
-			blankIndex = blankIndex+NUM_SQUARES;
-		
-		}
-	}
-	
-	else if(moveDirection == RIGHT) {
-		//Check that blank is not on first column
-		if(blankIndex % NUM_SQUARES != 0) {
-			swap(&board[blankIndex] , &board[blankIndex-1]);
-			blankIndex = blankIndex-1;
-		}
-	}
-	
-	else if(moveDirection == LEFT) {
-		//Check that blank is not on last column
-		if(blankIndex% NUM_SQUARES != NUM_SQUARES-1) {
-			swap(&board[blankIndex] , &board[blankIndex+1]); 
-			blankIndex = blankIndex+1;
-		}
-	}
-	
-	else if(moveDirection == DOWN){
-		//Check that blank is not on the first row
-		if(blankIndex >= NUM_SQUARES){
-			swap(&board[blankIndex] , &board[blankIndex-NUM_SQUARES]);
-			blankIndex = blankIndex-NUM_SQUARES;
-		}
-	}
-	
-	
+        //Check that blank is not on last row
+        if(blankIndex <= NUM_SQUARES*NUM_SQUARES-NUM_SQUARES-1) {
+            swap(&board[blankIndex] , &board[blankIndex+NUM_SQUARES]);
+            blankIndex = blankIndex+NUM_SQUARES;
+        }
+    }
     
+    else if(moveDirection == RIGHT) {
+        //Check that blank is not on first column
+        if(blankIndex % NUM_SQUARES != 0) {
+            swap(&board[blankIndex] , &board[blankIndex-1]);
+            blankIndex = blankIndex-1;
+        }
+    }
     
+    else if(moveDirection == LEFT) {
+        //Check that blank is not on last column
+        if(blankIndex% NUM_SQUARES != NUM_SQUARES-1) {
+            swap(&board[blankIndex] , &board[blankIndex+1]);
+            blankIndex = blankIndex+1;
+        }
+    }
+    
+    else if(moveDirection == DOWN){
+        //Check that blank is not on the first row
+        if(blankIndex >= NUM_SQUARES){
+            swap(&board[blankIndex] , &board[blankIndex-NUM_SQUARES]);
+            blankIndex = blankIndex-NUM_SQUARES;
+        }
+    }
 }
 
+/*void keyboardArrows() {
+    
+    volatile int * PS2_ptr = (int *)PS2_BASE;
+    int PS2_data, RVALID;
+    char byte1 = 0, byte2 = 0, byte3 = 0, byte4 = 0;
+    *(PS2_ptr) = 0xFF; // reset
+    while (1) {
+        PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
+        RVALID = PS2_data & 0x8000; // extract the RVALID field
+        if (RVALID) {
+            byte1 = byte2;
+            byte2 = byte3;
+            byte3 = byte4;
+            byte4 = PS2_data & 0XFF;
+        }
+    }
+    
+    //move or break code?
+    if(byte1 == (char)0x75) {//this goes up
+        moveDirection(UP);
+    }
+    if(byte2 == (char)0x6B) {//this goes to the left
+        moveDirection(LEFT);
+    }
+    if(byte3 == (char)0x72) {//this goes down
+        moveDirection(DOWN);
+    }
+    if(byte4 == (char)0x74) {//this goes to the right
+        moveDirection(RIGHT);
+    }
+}*/
+
+void PS2_ISR(){
+    
+    draw = TRUE;
+    unsigned char byte = 0;
+
+    printf("bebe");
+    volatile int *PS2_ptr = (int *)0xFF200100;
+    int PS2_data, RVALID;
+    PS2_data = *(PS2_ptr);// read the Data register in the PS/2 port
+    RVALID = (PS2_data & 0x8000);// extract the RVALID field
+
+    int interruptReg;
+    interruptReg = *(PS2_ptr + 1);
+    *(PS2_ptr + 1) = interruptReg;
+
+    if (RVALID != 0) {
+        byte = PS2_data & 0xFF;
+
+        if (byte == (char)0x74){ // right arrow
+            moveBoard(RIGHT);
+            return;
+        }
+        if (byte == (char)0x6B){ //left arrow
+            moveBoard(LEFT);
+            return;
+        }
+    }
+}
+
+/* setup the PS/2 interrupts in the FPGA */
+void config_PS2() {
+    volatile int * PS2_ptr = (int *) 0xFF200100; // PS/2 base address
+    *(PS2_ptr + 1) = 0x00000001; // set RE to 1 to enable interrupts
+}
+
+// Define the IRQ exception handler
+void __attribute__((interrupt)) __cs3_isr_irq(void) {
+    // Read the ICCIAR from the CPU Interface in the GIC
+    int interrupt_ID = *((int *)0xFFFEC10C);
+    if (interrupt_ID == 79) // check if interrupt is from the KEYs
+    PS2_ISR();
+    else
+    while (1); // if unexpected, then stay here
+    // Write to the End of Interrupt Register (ICCEOIR)
+    *((int *)0xFFFEC110) = interrupt_ID;
+}
+
+// Define the remaining exception handlers
+void __attribute__((interrupt)) __cs3_reset(void) {
+    while (1);
+}
+
+void __attribute__((interrupt)) __cs3_isr_undef(void) {
+    while (1);
+}
+
+void __attribute__((interrupt)) __cs3_isr_swi(void) {
+    while (1);
+}
+
+void __attribute__((interrupt)) __cs3_isr_pabort(void) {
+    while (1);
+}
+
+void __attribute__((interrupt)) __cs3_isr_dabort(void) {
+    while (1);
+}
+
+void __attribute__((interrupt)) __cs3_isr_fiq(void) {
+    while (1);
+}
+
+//Initialize the banked stack pointer register for IRQ mode
+void set_A9_IRQ_stack(void) {
+    int stack, mode;
+    stack = 0xFFFFFFFF - 7; // top of A9 onchip memory, aligned to 8 bytes
+    /* change processor to IRQ mode with interrupts disabled */
+    mode = 0b11010010;
+    asm("msr cpsr, %[ps]" : : [ps] "r"(mode));
+    /* set banked stack pointer */
+    asm("mov sp, %[ps]" : : [ps] "r"(stack));
+    /* go back to SVC mode before executing subroutine return! */
+    mode = 0b11010011;
+    asm("msr cpsr, %[ps]" : : [ps] "r"(mode));
+}
+
+/*
+* Turn on interrupts in the ARM processor
+*/
+void enable_A9_interrupts(void) {
+    int status = 0b01010011;
+    asm("msr cpsr, %[ps]" : : [ps] "r"(status));
+}
+
+// Turn off interrupts in the ARM processor
+void disable_A9_interrupts(void) {
+    int status = 0b11010011;
+    asm("msr cpsr, %[ps]" : : [ps] "r"(status));
+}
+
+/*
+* Configure the Generic Interrupt Controller (GIC)
+*/
+void config_GIC() {
+    config_interrupt (79, 1); // configure the FPGA KEYs interrupt (73)
+    // Set Interrupt Priority Mask Register (ICCPMR). Enable interrupts of all
+    // priorities
+    *((int *) 0xFFFEC104) = 0xFFFF;
+    // Set CPU Interface Control Register (ICCICR). Enable signaling of
+    // interrupts
+    *((int *) 0xFFFEC100) = 1;
+    // Configure the Distributor Control Register (ICDDCR) to send pending
+    // interrupts to CPUs
+    *((int *) 0xFFFED000) = 1;
+}
+
+/*
+* Configure Set Enable Registers (ICDISERn) and Interrupt Processor Target
+* Registers (ICDIPTRn). The default (reset) values are used for other registers
+* in the GIC.
+*/
+void config_interrupt(int N, int CPU_target) {
+    int reg_offset, index, value, address;
+    /* Configure the Interrupt Set-Enable Registers (ICDISERn).
+    * reg_offset = (integer_div(N / 32) * 4
+    * value = 1 << (N mod 32) */
+    reg_offset = (N >> 3) & 0xFFFFFFFC;
+    index = N & 0x1F;
+    value = 0x1 << index;
+    address = 0xFFFED100 + reg_offset;
+    /* Now that we know the register address and value, set the appropriate bit */
+    *(int *)address |= value;
+
+    /* Configure the Interrupt Processor Targets Register (ICDIPTRn)
+    * reg_offset = integer_div(N / 4) * 4
+    * index = N mod 4 */
+    reg_offset = (N & 0xFFFFFFFC);
+    index = N & 0x3;
+    address = 0xFFFED800 + reg_offset + index;
+    /* Now that we know the register address and value, write to (only) the
+    * appropriate byte */
+    *(char *)address = (char)CPU_target;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+void __attribute__((interrupt)) __cs3_isr_irq(void) {
+    
+    // Read the ICCIAR from the processor interface
+    int address = MPCORE_GIC_CPUIF + ICCIAR;
+    int int_ID = *((int *)address);
+    if( int_ID == PS2_PORT_ID)
+        configure_ps2_port();
+    
+    //else if (int_ID == INTERVAL_TIMER_IRQ) // check if interrupt is from the Altera timer
+    //    interval_timer_ISR();
+    //else if (int_ID == KEYS_IRQ) // check if interrupt is from the KEYs
+    //    pushbutton_ISR();
+    else
+        while (1)
+        ; // if unexpected, then stay here
+    // Write to the End of Interrupt Register (ICCEOIR)
+    address = MPCORE_GIC_CPUIF + ICCEOIR;
+    *((int *)address) = int_ID;
+    return;
+}
+    
+void configure_ps2_port() {
+    volatile int * PS2_ptr = (int *)PS2_BASE;
+    int PS2_data, RVALID;
+    PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
+    RVALID = PS2_data & 0x8000; // extract the RVALID field
+}
+
+void ps2_port_IRQ(int PS2_ptr) {
+    
+    char byte1 = 0, byte2 = 0, byte3 = 0, byte4 = 0;
+    //*(PS2_ptr) = 0xFF; // reset
+    
+    //move or break code????
+    if(byte1 == (char)0x75) {//this goes up
+        moveDirection(UP);
+    }
+    else if(byte2 == (char)0x6B) {//this goes to the left
+        moveDirection(LEFT);
+    }
+    else if(byte3 == (char)0x72) {//this goes down
+        moveDirection(DOWN);
+    }
+    else if(byte4 == (char)0x74) {//this goes to the right
+        moveDirection(RIGHT);
+    }
+}*/
+
+
+    
+
+    
+
+    
+
+
     
     
+
 
     
 
     
 
 
+    
+    
+
+    
     
     
