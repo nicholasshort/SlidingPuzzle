@@ -315,7 +315,7 @@ const uint16_t full_ghost[220][220] = {
     
 /* Constants for animation */
 #define BOX_LEN 2
-#define NUM_BOXES 8
+#define NUM_BOXES 30
 
 #define FALSE 0
 #define TRUE 1
@@ -328,6 +328,53 @@ const uint16_t full_ghost[220][220] = {
 volatile int pixel_buffer_start; // global variable
 bool draw = TRUE;
 
+short int colour_array[10] = {WHITE, YELLOW, RED, GREEN, GREY, BLUE, CYAN, MAGENTA, PINK, ORANGE};
+
+/* Fireworks 1 Positions */
+int x_posf1_1[4] = {100, 85, 65, 42};
+int y_posf1_1[4] = {82, 75, 70, 100};
+int x_posf1_2[4] = {100, 85, 70, 49};
+int y_posf1_2[4] = {82, 85, 90, 130};
+int x_posf1_3[4] = {100, 90, 83, 77};
+int y_posf1_3[4] = {82, 90, 120, 135};
+int x_posf1_4[4] = {100, 85, 65, 45};
+int y_posf1_4[4] = {82, 55, 50, 70};
+//mirror sections
+int x_posf1_5[4] = {100, 115, 135, 158};
+int y_posf1_5[4] = {82, 75, 70, 100};
+int x_posf1_6[4] = {100, 115, 130, 151};
+int y_posf1_6[4] = {82, 85, 90, 130};
+int x_posf1_7[4] = {100, 110, 117, 123};
+int y_posf1_7[4] = {82, 90, 120, 135};
+int x_posf1_8[4] = {100, 115, 135, 155};
+int y_posf1_8[4] = {82, 55, 50, 70};
+
+/* Fireworks 2 Positions */
+int x_posf2_1[4] = {240, 225, 205, 182};
+int y_posf2_1[4] = {150, 143, 138, 168};
+int x_posf2_2[4] = {240, 225, 210, 189};
+int y_posf2_2[4] = {150, 153, 158, 198};
+int x_posf2_3[4] = {240, 230, 223, 217};
+int y_posf2_3[4] = {150, 158, 188, 203};
+int x_posf2_4[4] = {240, 225, 205, 185};
+int y_posf2_4[4] = {150, 123, 118, 138};
+//mirror sections
+int x_posf2_5[4] = {240, 255, 275, 298};
+int y_posf2_5[4] = {150, 143, 138, 168};
+int x_posf2_6[4] = {240, 255, 270, 291};
+int y_posf2_6[4] = {150, 153, 158, 198};
+int x_posf2_7[4] = {240, 250, 257, 263};
+int y_posf2_7[4] = {150, 158, 188, 203};
+int x_posf2_8[4] = {240, 255, 275, 295};
+int y_posf2_8[4] = {150, 123, 118, 138};
+
+/* Needed to draw boxes on the screen */
+int dx_box[NUM_BOXES];
+int dy_box[NUM_BOXES];
+int X_box[NUM_BOXES];
+int Y_box[NUM_BOXES];
+
+/*** Declarations of functions ***/
 void clear_screen();
 void plot_pixel(int x, int y, short int line_colour);
 void plot_character(int x, int y, char ASCII_code);
@@ -336,7 +383,10 @@ void swap(int *xp, int *yp);
 void draw_subsquare(int square, int board_position);
 void moveBoard(int moveDirection);
 void draw_board();
-void KEY_ISR();
+void wait_for_vsync();
+void draw_box(int x, int y, int boxLen, short int line_colour);
+void bezier(int x[], int y[]);
+void draw_fireworks();
 
 //Board variables
 int board[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
@@ -349,34 +399,38 @@ void enable_A9_interrupts();
 void disable_A9_interrupts();
 void config_GIC();
 void config_interrupt(int N, int CPU_target);
+void KEY_ISR();
 
 
 int main(){
-	
+    
     disable_A9_interrupts();
     set_A9_IRQ_stack();// initialize the stack pointer for IRQ mode
     config_GIC();// configure the general interrupt controller
     config_PS2();
-	config_KEY();
+    config_KEY();
     enable_A9_interrupts();// enable interrupts
     
-	
-	
+    
+    
     volatile int * pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL_BASE;
     volatile int * char_ctrl_ptr = (int *)CHAR_BUF_CTRL_BASE;
     //Read location of the pixel buffer from the pixel buffer controller
     pixel_buffer_start = *pixel_ctrl_ptr;
     clear_screen();
-	printf("Hola");
-	
+    //printf("Hola");
+    draw_board();
     
-    while(1) {
+    clear_screen();
+    draw_fireworks();
+    
+    /*while(1) {
         //if(draw) {
             //draw_board();
             //draw = FALSE;
         //}
-    }
-	
+    }*/
+    
 }
 
 void draw_board() {
@@ -448,6 +502,25 @@ void draw_line(int x0, int y0, int x1, int y1, short int line_colour) { //contai
     }
 }
 
+void draw_box(int x, int y, int boxLen, short int line_colour){
+    for(int i = 0; i < boxLen; i++) {
+        for(int j = 0; j < boxLen; j++) {
+            plot_pixel(x+i, y+j, line_colour);
+        }
+    }
+}
+void wait_for_vsync() {
+    volatile int * pixel_ctrl_ptr = (int *)0xFF203020;
+    register int status;
+    
+    *pixel_ctrl_ptr = 1;
+    
+    status = *(pixel_ctrl_ptr +3);
+    while((status & 0x01) != 0) {
+        status = *(pixel_ctrl_ptr +3);
+    }
+}
+
 void swap(int *xp, int *yp) {
     int temp = *xp;
     *xp = *yp;
@@ -508,29 +581,29 @@ void moveBoard(int moveDirection) {
             blankIndex = blankIndex-NUM_SQUARES;
         }
     }
-} 
+}
 
 void KEY_ISR() {
-	
-	volatile int* KEY_ptr = (int*) KEY_BASE;
-	int move = 0; 
-	
-	switch(*(KEY_ptr + 3)){ // Get edgecapture bits (could take log base 2);
-		case 1: move = 0;
-				break;
-		case 2:	move = 1;
-				break;
-		case 4: move = 2;
-				break;
-		case 8: move = 3;
-				break;
-		default: break; 
-			
-	}
-	
-	moveBoard(move);
-	draw = TRUE; // Set draw flag to true
-	*(KEY_ptr + 3) = *(KEY_ptr + 3); // Reset edgecapture	
+    
+    volatile int* KEY_ptr = (int*) KEY_BASE;
+    int move = 0;
+    
+    switch(*(KEY_ptr + 3)){ // Get edgecapture bits (could take log base 2);
+        case 1: move = 0;
+                break;
+        case 2:    move = 1;
+                break;
+        case 4: move = 2;
+                break;
+        case 8: move = 3;
+                break;
+        default: break;
+            
+    }
+    
+    moveBoard(move);
+    draw = TRUE; // Set draw flag to true
+    *(KEY_ptr + 3) = *(KEY_ptr + 3); // Reset edgecapture
 }
 
 
@@ -556,37 +629,37 @@ void PS2_ISR() {
             return;
         }
     }
-	
-	int interruptReg;
+    
+    /*int interruptReg;
     interruptReg = *(PS2_ptr + 1);
-    *(PS2_ptr + 1) = interruptReg;
-	
+    *(PS2_ptr + 1) = interruptReg;*/
+    
 }
 
 /* setup the PS/2 interrupts in the FPGA */
 void config_PS2() {
-	printf("configure");
-	volatile int * PS2_ptr = (int *) 0xFF200100; // PS/2 base address
+    printf("configure");
+    volatile int * PS2_ptr = (int *) 0xFF200100; // PS/2 base address
     *(PS2_ptr + 1) = 0x00000001; // set RE to 1 to enable interrupts
 }
 
 void config_KEY() {
-	volatile int* KEY_ptr = (int*) KEY_BASE;
-	*(KEY_ptr + 2) = 0xF; // Reset interrupt mask to allow for interrupts
+    volatile int* KEY_ptr = (int*) KEY_BASE;
+    *(KEY_ptr + 2) = 0xF; // Reset interrupt mask to allow for interrupts
 }
 
 // Define the IRQ exception handler
 void __attribute__((interrupt)) __cs3_isr_irq(void) {
     
-	// Read the ICCIAR from the CPU Interface in the GIC
+    // Read the ICCIAR from the CPU Interface in the GIC
     int interrupt_ID = *((int *)0xFFFEC10C);
     if (interrupt_ID == 79) // check if interrupt is from the keyboard
-    	PS2_ISR();
-	else if(interrupt_ID == 73) // check if interrupt is from KEYs
-		KEY_ISR();
+        PS2_ISR();
+    else if(interrupt_ID == 73) // check if interrupt is from KEYs
+        KEY_ISR();
     else
-    	while (1); // if unexpected, then stay here
-	
+        while (1); // if unexpected, then stay here
+    
     // Write to the End of Interrupt Register (ICCEOIR)
     *((int *)0xFFFEC110) = interrupt_ID;
 }
@@ -648,7 +721,7 @@ void disable_A9_interrupts(void) {
 * Configure the Generic Interrupt Controller (GIC)
 */
 void config_GIC() {
-	config_interrupt (79, 1);
+    config_interrupt (79, 1);
     //config_interrupt (73, 1); // configure the FPGA KEYs interrupt (73)
     // Set Interrupt Priority Mask Register (ICCPMR). Enable interrupts of all
     // priorities
@@ -689,5 +762,63 @@ void config_interrupt(int N, int CPU_target) {
     *(char *)address = (char)CPU_target;
 }
 
+void bezier(int x[], int y[]) {
+    
+    int i, j = 0;
+    int *x_array, *y_array;
+    x_array = (int *)malloc(sizeof(int)*200);
+    y_array = (int *)malloc(sizeof(int)*200);
+    double t,xt,yt;
+    for (t = 0.0; t < 1.0; t += 0.01)
+    {
+        xt = pow(1-t,3)*x[0]+3*t*pow(1-t,2)*x[1]+3*pow(t,2)*(1-t)*x[2]+pow(t,3)*x[3];
+        yt = pow(1-t,3)*y[0]+3*t*pow(1-t,2)*y[1]+3*pow(t,2)*(1-t)*y[2]+pow(t,3)*y[3];
+        plot_pixel((int)xt, (int)yt, BLUE);
+        
+        //do we want this?
+        x_array[j] = xt;
+        y_array[j] = yt;
+        j++;
+    }
+    
+    //int colour = colour_array[rand() % 10];
+    for(int k = 0; k < j; k++){
+        plot_pixel(x_array[k], y_array[k], colour_array[rand() % 10]);
+    }
+    //I HAVE TO DELETE??????
+}
 
-	
+void draw_fireworks() {
+    
+    draw_line(100, 82, 100, 239, MAGENTA);
+    //drawing first firework
+    bezier(x_posf1_1, y_posf1_1);
+    bezier(x_posf1_2, y_posf1_2);
+    bezier(x_posf1_3, y_posf1_3);
+    bezier(x_posf1_4, y_posf1_4);
+    bezier(x_posf1_5, y_posf1_5);
+    bezier(x_posf1_6, y_posf1_6);
+    bezier(x_posf1_7, y_posf1_7);
+    bezier(x_posf1_8, y_posf1_8);
+    
+    draw_line(240, 150, 240, 239, MAGENTA);
+    bezier(x_posf2_1, y_posf2_1);
+    bezier(x_posf2_2, y_posf2_2);
+    bezier(x_posf2_3, y_posf2_3);
+    bezier(x_posf2_4, y_posf2_4);
+    bezier(x_posf2_5, y_posf2_5);
+    bezier(x_posf2_6, y_posf2_6);
+    bezier(x_posf2_7, y_posf2_7);
+    bezier(x_posf2_8, y_posf2_8);
+    
+    for(int i = 0; i < NUM_BOXES; i++) {
+        draw_box(X_box[i], Y_box[i], BOX_LEN, colour_array[rand() % 10]);
+    }
+}
+    
+
+
+    
+
+    
+    
