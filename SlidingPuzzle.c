@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>	
 #include <stdbool.h>
 
 
@@ -324,9 +325,19 @@ const uint16_t full_ghost[220][220] = {
 #define RIGHT 1
 #define LEFT 2
 #define DOWN 3
-    
-volatile int pixel_buffer_start; // global variable
-bool draw = TRUE;
+	
+#define ZERO 0b00111111
+#define ONE 0b00000110
+#define TWO 0b01011011
+#define THREE 0b01001111
+#define FOUR 0b01100110
+#define FIVE 0b01101101
+#define SIX 0b01111101
+#define SEVEN 0b00000111
+#define EIGHT 0b01111111
+#define NINE 0b01100111
+	
+
 
 void clear_screen();
 void plot_pixel(int x, int y, short int line_colour);
@@ -337,44 +348,76 @@ void draw_subsquare(int square, int board_position);
 void moveBoard(int moveDirection);
 void draw_board();
 void KEY_ISR();
-
-//Board variables
-int board[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
-int blankIndex = 15;//Index of blank square
-
 void PS2_ISR();
+void PRIV_TIMER_ISR();
 void config_PS2();
 void set_A9_IRQ_stack();
 void enable_A9_interrupts();
 void disable_A9_interrupts();
 void config_GIC();
 void config_interrupt(int N, int CPU_target);
+void config_PRIV_TIMER();
+void config_KEY();
+void hexDisplay(int number);
+void scramble(int numTimes);
+void wait_for_vsync();
+
+int getBitCode(int num);
+
+
+//Board variables
+int board[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+int blankIndex = 15;//Index of blank square
+
+//Timer counter
+int timer = 0;
+
+//Pointer to memory buffer
+volatile int pixel_buffer_start;
+
+//Flag to draw board
+bool draw = TRUE;
 
 
 int main(){
+	
+	//scramble(10000);
 	
     disable_A9_interrupts();
     set_A9_IRQ_stack();// initialize the stack pointer for IRQ mode
     config_GIC();// configure the general interrupt controller
     config_PS2();
 	config_KEY();
+	config_PRIV_TIMER();
     enable_A9_interrupts();// enable interrupts
-    
-	
-	
+
     volatile int * pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL_BASE;
     volatile int * char_ctrl_ptr = (int *)CHAR_BUF_CTRL_BASE;
-    //Read location of the pixel buffer from the pixel buffer controller
-    pixel_buffer_start = *pixel_ctrl_ptr;
-    clear_screen();
-	printf("Hola");
-	
     
+    *(pixel_ctrl_ptr + 1) = 0xC8000000;
+    wait_for_vsync();
+	*(pixel_ctrl_ptr + 1) = 0xC0000000;
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+    clear_screen();
+	draw_board();
+	wait_for_vsync();
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
+	clear_screen();
+	draw_board();
+	wait_for_vsync();
+	pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+	
+	
+	
     while(1) {
-        //if(draw) {
-            //draw_board();
-            //draw = FALSE;
-        //}
+		fflush(stdout);
+       	//if(draw) {
+			draw_board();
+            draw = FALSE;
+			wait_for_vsync();
+			pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+       	//}
+		hexDisplay(timer);
     }
 	
 }
@@ -474,12 +517,21 @@ void draw_subsquare(int square, int board_position) {
     }
 }
 
+void print(){
+	
+	for(int i = 0; i < NUM_SQUARES*NUM_SQUARES; i++){
+		if(i%4 == 0)
+			printf("\n");
+		printf("%d", board[i]);
+		
+	}
+}
     
 void moveBoard(int moveDirection) {
-    
     if(moveDirection == UP) {
         //Check that blank is not on last row
         if(blankIndex <= NUM_SQUARES*NUM_SQUARES-NUM_SQUARES-1) {
+			printf("moved up");
             swap(&board[blankIndex] , &board[blankIndex+NUM_SQUARES]);
             blankIndex = blankIndex+NUM_SQUARES;
         }
@@ -488,6 +540,7 @@ void moveBoard(int moveDirection) {
     else if(moveDirection == RIGHT) {
         //Check that blank is not on first column
         if(blankIndex % NUM_SQUARES != 0) {
+			printf("moved right");
             swap(&board[blankIndex] , &board[blankIndex-1]);
             blankIndex = blankIndex-1;
         }
@@ -496,6 +549,7 @@ void moveBoard(int moveDirection) {
     else if(moveDirection == LEFT) {
         //Check that blank is not on last column
         if(blankIndex% NUM_SQUARES != NUM_SQUARES-1) {
+			printf("moved left");
             swap(&board[blankIndex] , &board[blankIndex+1]);
             blankIndex = blankIndex+1;
         }
@@ -504,25 +558,97 @@ void moveBoard(int moveDirection) {
     else if(moveDirection == DOWN){
         //Check that blank is not on the first row
         if(blankIndex >= NUM_SQUARES){
+			printf("moved down");
             swap(&board[blankIndex] , &board[blankIndex-NUM_SQUARES]);
             blankIndex = blankIndex-NUM_SQUARES;
         }
     }
-} 
+}
+
+void scramble(int numTimes) {
+	
+	for(int i = 0; i < numTimes; i++){
+		moveBoard(rand() % 4);
+	}
+	
+}
+
+void wait_for_vsync(){
+	volatile int* pixel_ctrl_ptr = (int*) PIXEL_BUF_CTRL_BASE;
+	
+	//Synchronize with VGA port's controller
+	*pixel_ctrl_ptr = 1;
+	
+	register int status;
+	
+	status = *(pixel_ctrl_ptr + 3); //3 words down from front buffer address (int is 4 bytes <=> a 32 bit word)
+	
+	while((status & 0x01) != 0){
+		status = *(pixel_ctrl_ptr + 3);
+	}
+	
+}
+
+void hexDisplay(int number) {
+	volatile int* hexDisplay_ptr = (int*) HEX3_HEX0_BASE;
+	
+	//No more counting after 
+	if(number > 9999)
+		return;
+	
+	int fullNumber = 0;
+	int digit;
+	//Get ones digit
+	digit = getBitCode(number % 10);
+	fullNumber += digit;
+	
+	//Get tens digit
+	digit = getBitCode((number/10) % 10);
+	fullNumber = fullNumber | (digit << 8);
+	
+	//Get hundreds digit
+	digit = getBitCode((number/100) % 10);
+	fullNumber = fullNumber | (digit << 16);
+	
+	//Get thousands digit
+	digit = getBitCode((number/1000) % 10);
+	fullNumber = fullNumber | (digit << 24);
+	
+	//Update hex display
+	*(hexDisplay_ptr) = fullNumber;	
+}
+
+//Returns the seven segment bit code for integers 0-9
+int getBitCode(int num) {
+	switch(num){
+		case 0: return ZERO;
+		case 1: return ONE;
+		case 2: return TWO;
+		case 3: return THREE;
+		case 4: return FOUR;
+		case 5: return FIVE;
+		case 6: return SIX;
+		case 7: return SEVEN;
+		case 8: return EIGHT;
+		case 9: return NINE;
+		default: return ZERO;
+	}
+}
 
 void KEY_ISR() {
+	
 	
 	volatile int* KEY_ptr = (int*) KEY_BASE;
 	int move = 0; 
 	
 	switch(*(KEY_ptr + 3)){ // Get edgecapture bits (could take log base 2);
-		case 1: move = 0;
+		case 1: move = UP;
 				break;
-		case 2:	move = 1;
+		case 2:	move = RIGHT;
 				break;
-		case 4: move = 2;
+		case 4: move = LEFT;
 				break;
-		case 8: move = 3;
+		case 8: move = DOWN;
 				break;
 		default: break; 
 			
@@ -535,37 +661,68 @@ void KEY_ISR() {
 
 
 void PS2_ISR() {
-    printf("service");
+    
     draw = TRUE;
-    unsigned char byte = 0;
+    unsigned char breakKey = 0;
+	unsigned char makeKey = 0;
 
-    volatile int *PS2_ptr = (int *)0xFF200100;
-    int PS2_data, RVALID;
-    PS2_data = *(PS2_ptr);// read the Data register in the PS/2 port
-    RVALID = (PS2_data & 0x8000);// extract the RVALID field
-
-    if (RVALID != 0) {
-        byte = PS2_data & 0xFF;
-
-        if (byte == (char)0x74){ // right arrow
-            moveBoard(RIGHT);
-            return;
-        }
-        if (byte == (char)0x6B){ //left arrow
-            moveBoard(LEFT);
-            return;
-        }
-    }
+    volatile int *PS2_ptr = (int *) PS2_BASE;
+    int PS2_data, RVALID, RAVAIL;
+	
+	PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
+	
+	RVALID = PS2_data & 0x8000;	// extract rvalid field
+	RAVAIL = PS2_data & 0xFFFF0000; // extract ravail field
 	
 	int interruptReg;
     interruptReg = *(PS2_ptr + 1);
     *(PS2_ptr + 1) = interruptReg;
-	
+    
+	if (RVALID && RAVAIL == 0) {
+		
+		breakKey = PS2_data & 0xFF;
+		PS2_data = *(PS2_ptr);
+		RVALID = PS2_data & 0x8000;	// extract rvalid field
+		RAVAIL = PS2_data & 0xFFFF0000; // extract ravail field
+
+		if (breakKey == (char)0xF0){ // Check for break code
+			PS2_data = *(PS2_ptr);
+			RVALID = PS2_data & 0x8000;	// extract rvalid field
+			RAVAIL = PS2_data & 0xFFFF0000; // extract ravail field
+			makeKey = PS2_data & 0xFF; // extract make key
+			
+			if(makeKey == (char)0x1D) {
+				moveBoard(UP);
+				return;
+			}
+			if(makeKey == (char)0x1B) {
+				moveBoard(DOWN);
+				return;
+			}
+			if(makeKey == (char)0x1C) {
+				moveBoard(LEFT);
+				return;
+			}
+			if(makeKey == (char)0x23) {
+				moveBoard(RIGHT);
+				return;
+			}
+		}
+	}
+	interruptReg = *(PS2_ptr + 1);
+    *(PS2_ptr + 1) = interruptReg;
+    
+	printf("\n");
+}
+
+void PRIV_TIMER_ISR(){
+	volatile int* TIMER_ptr = (int*) MPCORE_PRIV_TIMER;
+	timer++; //Add one to time
+	*(TIMER_ptr + 3) = 0x1; //Reset interrupt bit
 }
 
 /* setup the PS/2 interrupts in the FPGA */
 void config_PS2() {
-	printf("configure");
 	volatile int * PS2_ptr = (int *) 0xFF200100; // PS/2 base address
     *(PS2_ptr + 1) = 0x00000001; // set RE to 1 to enable interrupts
 }
@@ -574,6 +731,13 @@ void config_KEY() {
 	volatile int* KEY_ptr = (int*) KEY_BASE;
 	*(KEY_ptr + 2) = 0xF; // Reset interrupt mask to allow for interrupts
 }
+
+void config_PRIV_TIMER(){
+	volatile int* TIMER_ptr = (int*) MPCORE_PRIV_TIMER;
+	*(TIMER_ptr) = 0x1E8480; // Have the timer count hundreths of a second
+	*(TIMER_ptr + 2) = 0x7; // Reset enable and interrupt mask bits
+}
+
 
 // Define the IRQ exception handler
 void __attribute__((interrupt)) __cs3_isr_irq(void) {
@@ -584,6 +748,8 @@ void __attribute__((interrupt)) __cs3_isr_irq(void) {
     	PS2_ISR();
 	else if(interrupt_ID == 73) // check if interrupt is from KEYs
 		KEY_ISR();
+	else if(interrupt_ID == 29) // check if interrupt is from timer
+		PRIV_TIMER_ISR();
     else
     	while (1); // if unexpected, then stay here
 	
@@ -649,7 +815,8 @@ void disable_A9_interrupts(void) {
 */
 void config_GIC() {
 	config_interrupt (79, 1);
-    //config_interrupt (73, 1); // configure the FPGA KEYs interrupt (73)
+    config_interrupt (73, 1); // configure the FPGA KEYs interrupt (73)
+	config_interrupt (29, 1); // configure the private timer
     // Set Interrupt Priority Mask Register (ICCPMR). Enable interrupts of all
     // priorities
     *((int *) 0xFFFEC104) = 0xFFFF;
@@ -691,3 +858,4 @@ void config_interrupt(int N, int CPU_target) {
 
 
 	
+	s
