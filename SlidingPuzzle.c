@@ -1,7 +1,6 @@
 #include <stdio.h>
-#include <stdlib.h>	
+#include <stdlib.h>
 #include <stdbool.h>
-
 
 const uint16_t full_ghost[220][220] = {
     {63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422,63422},
@@ -325,7 +324,7 @@ const uint16_t full_ghost[220][220] = {
 #define RIGHT 1
 #define LEFT 2
 #define DOWN 3
-	
+    
 #define ZERO 0b00111111
 #define ONE 0b00000110
 #define TWO 0b01011011
@@ -336,7 +335,7 @@ const uint16_t full_ghost[220][220] = {
 #define SEVEN 0b00000111
 #define EIGHT 0b01111111
 #define NINE 0b01100111
-	
+    
 
 
 void clear_screen();
@@ -361,13 +360,26 @@ void config_KEY();
 void hexDisplay(int number);
 void scramble(int numTimes);
 void wait_for_vsync();
+struct xy* bezier(struct xy *points);
+void load_fireworks();
 
 int getBitCode(int num);
 
+//Defined structs
+struct xy {
+    int x;
+    int y;
+};
+
+struct line {
+    struct xy position[4];
+    struct xy* curve;
+};
 
 //Board variables
 int board[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 int blankIndex = 15;//Index of blank square
+short int colour_array[10] = {WHITE, YELLOW, RED, GREEN, GREY, BLUE, CYAN, MAGENTA, PINK, ORANGE};
 
 //Timer counter
 int timer = 0;
@@ -378,17 +390,19 @@ volatile int pixel_buffer_start;
 //Flag to draw board
 bool draw = TRUE;
 
+struct line firework[16];
+
 
 int main(){
-	
-	//scramble(10000);
-	
+    
+    scramble(10000);
+    
     disable_A9_interrupts();
     set_A9_IRQ_stack();// initialize the stack pointer for IRQ mode
     config_GIC();// configure the general interrupt controller
     config_PS2();
-	config_KEY();
-	config_PRIV_TIMER();
+    config_KEY();
+    config_PRIV_TIMER();
     enable_A9_interrupts();// enable interrupts
 
     volatile int * pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL_BASE;
@@ -396,30 +410,29 @@ int main(){
     
     *(pixel_ctrl_ptr + 1) = 0xC8000000;
     wait_for_vsync();
-	*(pixel_ctrl_ptr + 1) = 0xC0000000;
+    *(pixel_ctrl_ptr + 1) = 0xC0000000;
     pixel_buffer_start = *(pixel_ctrl_ptr + 1);
     clear_screen();
-	draw_board();
-	wait_for_vsync();
+    draw_board();
+    wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
-	clear_screen();
-	draw_board();
-	wait_for_vsync();
-	pixel_buffer_start = *(pixel_ctrl_ptr + 1);
-	
-	
-	
+    clear_screen();
+    draw_board();
+    wait_for_vsync();
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+    
+
     while(1) {
-		fflush(stdout);
-       	//if(draw) {
-			draw_board();
+        fflush(stdout);
+           //if(draw) {
+            draw_board();
             draw = FALSE;
-			wait_for_vsync();
-			pixel_buffer_start = *(pixel_ctrl_ptr + 1);
-       	//}
-		hexDisplay(timer);
+            wait_for_vsync();
+            pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+           //}
+        hexDisplay(timer);
     }
-	
+    
 }
 
 void draw_board() {
@@ -518,20 +531,20 @@ void draw_subsquare(int square, int board_position) {
 }
 
 void print(){
-	
-	for(int i = 0; i < NUM_SQUARES*NUM_SQUARES; i++){
-		if(i%4 == 0)
-			printf("\n");
-		printf("%d", board[i]);
-		
-	}
+    
+    for(int i = 0; i < NUM_SQUARES*NUM_SQUARES; i++){
+        if(i%4 == 0)
+            printf("\n");
+        printf("%d", board[i]);
+        
+    }
 }
     
 void moveBoard(int moveDirection) {
     if(moveDirection == UP) {
         //Check that blank is not on last row
         if(blankIndex <= NUM_SQUARES*NUM_SQUARES-NUM_SQUARES-1) {
-			printf("moved up");
+            printf("moved up");
             swap(&board[blankIndex] , &board[blankIndex+NUM_SQUARES]);
             blankIndex = blankIndex+NUM_SQUARES;
         }
@@ -540,7 +553,7 @@ void moveBoard(int moveDirection) {
     else if(moveDirection == RIGHT) {
         //Check that blank is not on first column
         if(blankIndex % NUM_SQUARES != 0) {
-			printf("moved right");
+            printf("moved right");
             swap(&board[blankIndex] , &board[blankIndex-1]);
             blankIndex = blankIndex-1;
         }
@@ -549,7 +562,7 @@ void moveBoard(int moveDirection) {
     else if(moveDirection == LEFT) {
         //Check that blank is not on last column
         if(blankIndex% NUM_SQUARES != NUM_SQUARES-1) {
-			printf("moved left");
+            printf("moved left");
             swap(&board[blankIndex] , &board[blankIndex+1]);
             blankIndex = blankIndex+1;
         }
@@ -558,7 +571,7 @@ void moveBoard(int moveDirection) {
     else if(moveDirection == DOWN){
         //Check that blank is not on the first row
         if(blankIndex >= NUM_SQUARES){
-			printf("moved down");
+            printf("moved down");
             swap(&board[blankIndex] , &board[blankIndex-NUM_SQUARES]);
             blankIndex = blankIndex-NUM_SQUARES;
         }
@@ -566,97 +579,97 @@ void moveBoard(int moveDirection) {
 }
 
 void scramble(int numTimes) {
-	
-	for(int i = 0; i < numTimes; i++){
-		moveBoard(rand() % 4);
-	}
-	
+    
+    for(int i = 0; i < numTimes; i++){
+        moveBoard(rand() % 4);
+    }
+    
 }
 
 void wait_for_vsync(){
-	volatile int* pixel_ctrl_ptr = (int*) PIXEL_BUF_CTRL_BASE;
-	
-	//Synchronize with VGA port's controller
-	*pixel_ctrl_ptr = 1;
-	
-	register int status;
-	
-	status = *(pixel_ctrl_ptr + 3); //3 words down from front buffer address (int is 4 bytes <=> a 32 bit word)
-	
-	while((status & 0x01) != 0){
-		status = *(pixel_ctrl_ptr + 3);
-	}
-	
+    volatile int* pixel_ctrl_ptr = (int*) PIXEL_BUF_CTRL_BASE;
+    
+    //Synchronize with VGA port's controller
+    *pixel_ctrl_ptr = 1;
+    
+    register int status;
+    
+    status = *(pixel_ctrl_ptr + 3); //3 words down from front buffer address (int is 4 bytes <=> a 32 bit word)
+    
+    while((status & 0x01) != 0){
+        status = *(pixel_ctrl_ptr + 3);
+    }
+    
 }
 
 void hexDisplay(int number) {
-	volatile int* hexDisplay_ptr = (int*) HEX3_HEX0_BASE;
-	
-	//No more counting after 
-	if(number > 9999)
-		return;
-	
-	int fullNumber = 0;
-	int digit;
-	//Get ones digit
-	digit = getBitCode(number % 10);
-	fullNumber += digit;
-	
-	//Get tens digit
-	digit = getBitCode((number/10) % 10);
-	fullNumber = fullNumber | (digit << 8);
-	
-	//Get hundreds digit
-	digit = getBitCode((number/100) % 10);
-	fullNumber = fullNumber | (digit << 16);
-	
-	//Get thousands digit
-	digit = getBitCode((number/1000) % 10);
-	fullNumber = fullNumber | (digit << 24);
-	
-	//Update hex display
-	*(hexDisplay_ptr) = fullNumber;	
+    volatile int* hexDisplay_ptr = (int*) HEX3_HEX0_BASE;
+    
+    //No more counting after
+    if(number > 9999)
+        return;
+    
+    int fullNumber = 0;
+    int digit;
+    //Get ones digit
+    digit = getBitCode(number % 10);
+    fullNumber += digit;
+    
+    //Get tens digit
+    digit = getBitCode((number/10) % 10);
+    fullNumber = fullNumber | (digit << 8);
+    
+    //Get hundreds digit
+    digit = getBitCode((number/100) % 10);
+    fullNumber = fullNumber | (digit << 16);
+    
+    //Get thousands digit
+    digit = getBitCode((number/1000) % 10);
+    fullNumber = fullNumber | (digit << 24);
+    
+    //Update hex display
+    *(hexDisplay_ptr) = fullNumber;
 }
 
 //Returns the seven segment bit code for integers 0-9
 int getBitCode(int num) {
-	switch(num){
-		case 0: return ZERO;
-		case 1: return ONE;
-		case 2: return TWO;
-		case 3: return THREE;
-		case 4: return FOUR;
-		case 5: return FIVE;
-		case 6: return SIX;
-		case 7: return SEVEN;
-		case 8: return EIGHT;
-		case 9: return NINE;
-		default: return ZERO;
-	}
+    switch(num){
+        case 0: return ZERO;
+        case 1: return ONE;
+        case 2: return TWO;
+        case 3: return THREE;
+        case 4: return FOUR;
+        case 5: return FIVE;
+        case 6: return SIX;
+        case 7: return SEVEN;
+        case 8: return EIGHT;
+        case 9: return NINE;
+        default: return ZERO;
+    }
 }
 
 void KEY_ISR() {
-	
-	
-	volatile int* KEY_ptr = (int*) KEY_BASE;
-	int move = 0; 
-	
-	switch(*(KEY_ptr + 3)){ // Get edgecapture bits (could take log base 2);
-		case 1: move = UP;
-				break;
-		case 2:	move = RIGHT;
-				break;
-		case 4: move = LEFT;
-				break;
-		case 8: move = DOWN;
-				break;
-		default: break; 
-			
-	}
-	
-	moveBoard(move);
-	draw = TRUE; // Set draw flag to true
-	*(KEY_ptr + 3) = *(KEY_ptr + 3); // Reset edgecapture	
+    
+    
+    volatile int* KEY_ptr = (int*) KEY_BASE;
+    int move = 0;
+    
+    switch(*(KEY_ptr + 3)){ // Get edgecapture bits (could take log base 2);
+        case 1: move = UP;
+                break;
+        case 2:    move = RIGHT;
+                break;
+        case 4: move = LEFT;
+                break;
+        case 8: move = DOWN;
+                break;
+        default: break;
+            
+    }
+    
+    moveBoard(move);
+    draw = TRUE; // Set draw flag to true
+    *(KEY_ptr + 3) = *(KEY_ptr + 3); // Reset edgecapture
 }
 
 
@@ -664,95 +677,95 @@ void PS2_ISR() {
     
     draw = TRUE;
     unsigned char breakKey = 0;
-	unsigned char makeKey = 0;
+    unsigned char makeKey = 0;
 
     volatile int *PS2_ptr = (int *) PS2_BASE;
     int PS2_data, RVALID, RAVAIL;
-	
-	PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
-	
-	RVALID = PS2_data & 0x8000;	// extract rvalid field
-	RAVAIL = PS2_data & 0xFFFF0000; // extract ravail field
-	
-	int interruptReg;
+    
+    PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
+    
+    RVALID = PS2_data & 0x8000;    // extract rvalid field
+    RAVAIL = PS2_data & 0xFFFF0000; // extract ravail field
+    
+    int interruptReg;
     interruptReg = *(PS2_ptr + 1);
     *(PS2_ptr + 1) = interruptReg;
     
-	if (RVALID && RAVAIL == 0) {
-		
-		breakKey = PS2_data & 0xFF;
-		PS2_data = *(PS2_ptr);
-		RVALID = PS2_data & 0x8000;	// extract rvalid field
-		RAVAIL = PS2_data & 0xFFFF0000; // extract ravail field
+    if (RVALID && RAVAIL == 0) {
+        
+        breakKey = PS2_data & 0xFF;
+        PS2_data = *(PS2_ptr);
+        RVALID = PS2_data & 0x8000;    // extract rvalid field
+        RAVAIL = PS2_data & 0xFFFF0000; // extract ravail field
 
-		if (breakKey == (char)0xF0){ // Check for break code
-			PS2_data = *(PS2_ptr);
-			RVALID = PS2_data & 0x8000;	// extract rvalid field
-			RAVAIL = PS2_data & 0xFFFF0000; // extract ravail field
-			makeKey = PS2_data & 0xFF; // extract make key
-			
-			if(makeKey == (char)0x1D) {
-				moveBoard(UP);
-				return;
-			}
-			if(makeKey == (char)0x1B) {
-				moveBoard(DOWN);
-				return;
-			}
-			if(makeKey == (char)0x1C) {
-				moveBoard(LEFT);
-				return;
-			}
-			if(makeKey == (char)0x23) {
-				moveBoard(RIGHT);
-				return;
-			}
-		}
-	}
-	interruptReg = *(PS2_ptr + 1);
+        if (breakKey == (char)0xF0){ // Check for break code
+            PS2_data = *(PS2_ptr);
+            RVALID = PS2_data & 0x8000;    // extract rvalid field
+            RAVAIL = PS2_data & 0xFFFF0000; // extract ravail field
+            makeKey = PS2_data & 0xFF; // extract make key
+            
+            if(makeKey == (char)0x1D) {
+                moveBoard(UP);
+                return;
+            }
+            if(makeKey == (char)0x1B) {
+                moveBoard(DOWN);
+                return;
+            }
+            if(makeKey == (char)0x1C) {
+                moveBoard(LEFT);
+                return;
+            }
+            if(makeKey == (char)0x23) {
+                moveBoard(RIGHT);
+                return;
+            }
+        }
+    }
+    interruptReg = *(PS2_ptr + 1);
     *(PS2_ptr + 1) = interruptReg;
     
-	printf("\n");
+    printf("\n");
 }
 
 void PRIV_TIMER_ISR(){
-	volatile int* TIMER_ptr = (int*) MPCORE_PRIV_TIMER;
-	timer++; //Add one to time
-	*(TIMER_ptr + 3) = 0x1; //Reset interrupt bit
+    volatile int* TIMER_ptr = (int*) MPCORE_PRIV_TIMER;
+    timer++; //Add one to time
+    *(TIMER_ptr + 3) = 0x1; //Reset interrupt bit
 }
 
 /* setup the PS/2 interrupts in the FPGA */
 void config_PS2() {
-	volatile int * PS2_ptr = (int *) 0xFF200100; // PS/2 base address
+    volatile int * PS2_ptr = (int *) 0xFF200100; // PS/2 base address
     *(PS2_ptr + 1) = 0x00000001; // set RE to 1 to enable interrupts
 }
 
 void config_KEY() {
-	volatile int* KEY_ptr = (int*) KEY_BASE;
-	*(KEY_ptr + 2) = 0xF; // Reset interrupt mask to allow for interrupts
+    volatile int* KEY_ptr = (int*) KEY_BASE;
+    *(KEY_ptr + 2) = 0xF; // Reset interrupt mask to allow for interrupts
 }
 
 void config_PRIV_TIMER(){
-	volatile int* TIMER_ptr = (int*) MPCORE_PRIV_TIMER;
-	*(TIMER_ptr) = 0x1E8480; // Have the timer count hundreths of a second
-	*(TIMER_ptr + 2) = 0x7; // Reset enable and interrupt mask bits
+    volatile int* TIMER_ptr = (int*) MPCORE_PRIV_TIMER;
+    *(TIMER_ptr) = 0x1E8480; // Have the timer count hundreths of a second
+    *(TIMER_ptr + 2) = 0x7; // Reset enable and interrupt mask bits
 }
 
 
 // Define the IRQ exception handler
 void __attribute__((interrupt)) __cs3_isr_irq(void) {
     
-	// Read the ICCIAR from the CPU Interface in the GIC
+    // Read the ICCIAR from the CPU Interface in the GIC
     int interrupt_ID = *((int *)0xFFFEC10C);
     if (interrupt_ID == 79) // check if interrupt is from the keyboard
-    	PS2_ISR();
-	else if(interrupt_ID == 73) // check if interrupt is from KEYs
-		KEY_ISR();
-	else if(interrupt_ID == 29) // check if interrupt is from timer
-		PRIV_TIMER_ISR();
+        PS2_ISR();
+    else if(interrupt_ID == 73) // check if interrupt is from KEYs
+        KEY_ISR();
+    else if(interrupt_ID == 29) // check if interrupt is from timer
+        PRIV_TIMER_ISR();
     else
-    	while (1); // if unexpected, then stay here
-	
+        while (1); // if unexpected, then stay here
+    
     // Write to the End of Interrupt Register (ICCEOIR)
     *((int *)0xFFFEC110) = interrupt_ID;
 }
@@ -814,9 +827,9 @@ void disable_A9_interrupts(void) {
 * Configure the Generic Interrupt Controller (GIC)
 */
 void config_GIC() {
-	config_interrupt (79, 1);
+    config_interrupt (79, 1);
     config_interrupt (73, 1); // configure the FPGA KEYs interrupt (73)
-	config_interrupt (29, 1); // configure the private timer
+    config_interrupt (29, 1); // configure the private timer
     // Set Interrupt Priority Mask Register (ICCPMR). Enable interrupts of all
     // priorities
     *((int *) 0xFFFEC104) = 0xFFFF;
@@ -856,6 +869,315 @@ void config_interrupt(int N, int CPU_target) {
     *(char *)address = (char)CPU_target;
 }
 
+struct xy* bezier(struct xy *points) {
+    
+    int i, j = 0;
+    struct xy* curve = (struct xy*)malloc(sizeof(struct xy)*200);
+    //struct xy curve[200];
+    double t,xt,yt;
+    for (t = 0.0; t < 1.0; t += 0.01)
+    {
+        xt = pow(1-t,3)*points[0].x+3*t*pow(1-t,2)*points[1].x+3*pow(t,2)*(1-t)*points[2].x+pow(t,3)*points[3].x;
+        yt = pow(1-t,3)*points[0].y+3*t*pow(1-t,2)*points[1].y+3*pow(t,2)*(1-t)*points[2].y+pow(t,3)*points[3].y;
+        curve[j].x = xt;
+        curve[j].y = yt;
+        j++;
+    }
 
-	
-	
+    return curve;
+}
+
+void load_fireworks() {
+    
+    draw_line(100, 82, 100, 239, MAGENTA);
+    draw_line(240, 150, 240, 239, MAGENTA);
+    
+    struct xy xy_position;
+    struct line line;
+    
+    /* FIREWORKS 1 */
+    xy_position.x = 100;
+    xy_position.y = 82;
+    line.position[0] = xy_position;
+    xy_position.x = 85;
+    xy_position.y = 75;
+    line.position[1] = xy_position;
+    xy_position.x = 65;
+    xy_position.y = 70;
+    line.position[2] = xy_position;
+    xy_position.x = 42;
+    xy_position.y = 100;
+    line.position[3] = xy_position;
+
+    //1st line of the fireworks
+    line.curve = bezier(line.position);
+    firework[0] = line;
+    
+    xy_position.x = 100;
+    xy_position.y = 82;
+    line.position[0] = xy_position;
+    xy_position.x = 85;
+    xy_position.y = 85;
+    line.position[1] = xy_position;
+    xy_position.x = 70;
+    xy_position.y = 90;
+    line.position[2] = xy_position;
+    xy_position.x = 49;
+    xy_position.y = 130;
+    line.position[3] = xy_position;
+    
+    //2nd line of the fireworks
+    line.curve = bezier(line.position);
+    firework[1] = line;
+
+    xy_position.x = 100;
+    xy_position.y = 82;
+    line.position[0] = xy_position;
+    xy_position.x = 90;
+    xy_position.y = 90;
+    line.position[1] = xy_position;
+    xy_position.x = 83;
+    xy_position.y = 120;
+    line.position[2] = xy_position;
+    xy_position.x = 77;
+    xy_position.y = 135;
+    line.position[3] = xy_position;
+    
+    //3rd line of the fireworks
+    line.curve = bezier(line.position);
+    firework[2] = line;
+    
+    xy_position.x = 100;
+    xy_position.y = 82;
+    line.position[0] = xy_position;
+    xy_position.x = 85;
+    xy_position.y = 55;
+    line.position[1] = xy_position;
+    xy_position.x = 65;
+    xy_position.y = 50;
+    line.position[2] = xy_position;
+    xy_position.x = 45;
+    xy_position.y = 70;
+    line.position[3] = xy_position;
+    
+    //4th line of the fireworks
+    line.curve = bezier(line.position);
+    firework[3] = line;
+    
+    xy_position.x = 100;
+    xy_position.y = 82;
+    line.position[0] = xy_position;
+    xy_position.x = 115;
+    xy_position.y = 75;
+    line.position[1] = xy_position;
+    xy_position.x = 135;
+    xy_position.y = 70;
+    line.position[2] = xy_position;
+    xy_position.x = 158;
+    xy_position.y = 100;
+    line.position[3] = xy_position;
+    
+    //5th line of the fireworks
+    line.curve = bezier(line.position);
+    firework[4] = line;
+    
+    xy_position.x = 100;
+    xy_position.y = 82;
+    line.position[0] = xy_position;
+    xy_position.x = 115;
+    xy_position.y = 85;
+    line.position[1] = xy_position;
+    xy_position.x = 130;
+    xy_position.y = 90;
+    line.position[2] = xy_position;
+    xy_position.x = 151;
+    xy_position.y = 130;
+    line.position[3] = xy_position;
+    
+    //6th line of the fireworks
+    line.curve = bezier(line.position);
+    firework[5] = line;
+    
+    xy_position.x = 100;
+    xy_position.y = 82;
+    line.position[0] = xy_position;
+    xy_position.x = 110;
+    xy_position.y = 90;
+    line.position[1] = xy_position;
+    xy_position.x = 117;
+    xy_position.y = 120;
+    line.position[2] = xy_position;
+    xy_position.x = 123;
+    xy_position.y = 135;
+    line.position[3] = xy_position;
+    
+    //7th line of the fireworks
+    line.curve = bezier(line.position);
+    firework[6] = line;
+    
+    xy_position.x = 100;
+    xy_position.y = 82;
+    line.position[0] = xy_position;
+    xy_position.x = 115;
+    xy_position.y = 55;
+    line.position[1] = xy_position;
+    xy_position.x = 135;
+    xy_position.y = 50;
+    line.position[2] = xy_position;
+    xy_position.x = 155;
+    xy_position.y = 70;
+    line.position[3] = xy_position;
+    
+    //8th line of the fireworks
+    line.curve = bezier(line.position);
+    firework[7] = line;
+    
+    /* FIREWORKS 2 */
+    xy_position.x = 240;
+    xy_position.y = 150;
+    line.position[0] = xy_position;
+    xy_position.x = 225;
+    xy_position.y = 143;
+    line.position[1] = xy_position;
+    xy_position.x = 205;
+    xy_position.y = 138;
+    line.position[2] = xy_position;
+    xy_position.x = 182;
+    xy_position.y = 168;
+    line.position[3] = xy_position;
+    
+    //9th line of the fireworks
+    line.curve = bezier(line.position);
+    firework[8] = line;
+    
+    xy_position.x = 240;
+    xy_position.y = 150;
+    line.position[0] = xy_position;
+    xy_position.x = 225;
+    xy_position.y = 153;
+    line.position[1] = xy_position;
+    xy_position.x = 210;
+    xy_position.y = 158;
+    line.position[2] = xy_position;
+    xy_position.x = 189;
+    xy_position.y = 198;
+    line.position[3] = xy_position;
+    
+    //10th line of the fireworks
+    line.curve = bezier(line.position);
+    firework[9] = line;
+    
+    xy_position.x = 240;
+    xy_position.y = 150;
+    line.position[0] = xy_position;
+    xy_position.x = 230;
+    xy_position.y = 158;
+    line.position[1] = xy_position;
+    xy_position.x = 223;
+    xy_position.y = 188;
+    line.position[2] = xy_position;
+    xy_position.x = 217;
+    xy_position.y = 203;
+    line.position[3] = xy_position;
+    
+    //11th line of the fireworks
+    line.curve = bezier(line.position);
+    firework[10] = line;
+        
+    xy_position.x = 240;
+    xy_position.y = 150;
+    line.position[0] = xy_position;
+    xy_position.x = 225;
+    xy_position.y = 123;
+    line.position[1] = xy_position;
+    xy_position.x = 205;
+    xy_position.y = 118;
+    line.position[2] = xy_position;
+    xy_position.x = 185;
+    xy_position.y = 138;
+    line.position[3] = xy_position;
+    
+    //12th line of the fireworks
+    line.curve = bezier(line.position);
+    firework[11] = line;
+    
+    xy_position.x = 240;
+    xy_position.y = 150;
+    line.position[0] = xy_position;
+    xy_position.x = 255;
+    xy_position.y = 143;
+    line.position[1] = xy_position;
+    xy_position.x = 275;
+    xy_position.y = 138;
+    line.position[2] = xy_position;
+    xy_position.x = 298;
+    xy_position.y = 168;
+    line.position[3] = xy_position;
+    
+    //13th line of the fireworks
+    line.curve = bezier(line.position);
+    firework[12] = line;
+    
+    xy_position.x = 240;
+    xy_position.y = 150;
+    line.position[0] = xy_position;
+    xy_position.x = 255;
+    xy_position.y = 153;
+    line.position[1] = xy_position;
+    xy_position.x = 270;
+    xy_position.y = 158;
+    line.position[2] = xy_position;
+    xy_position.x = 291;
+    xy_position.y = 198;
+    line.position[3] = xy_position;
+    
+    //14th line of the fireworks
+    line.curve = bezier(line.position);
+    firework[13] = line;
+    
+    xy_position.x = 240;
+    xy_position.y = 150;
+    line.position[0] = xy_position;
+    xy_position.x = 250;
+    xy_position.y = 158;
+    line.position[1] = xy_position;
+    xy_position.x = 257;
+    xy_position.y = 188;
+    line.position[2] = xy_position;
+    xy_position.x = 263;
+    xy_position.y = 203;
+    line.position[3] = xy_position;
+    
+    //15th line of the fireworks
+    line.curve = bezier(line.position);
+    firework[14] = line;
+    
+    xy_position.x = 240;
+    xy_position.y = 150;
+    line.position[0] = xy_position;
+    xy_position.x = 255;
+    xy_position.y = 123;
+    line.position[1] = xy_position;
+    xy_position.x = 275;
+    xy_position.y = 118;
+    line.position[2] = xy_position;
+    xy_position.x = 295;
+    xy_position.y = 138;
+    line.position[3] = xy_position;
+    
+    //16th line of the fireworks
+    line.curve = bezier(line.position);
+    firework[15] = line;
+
+    /*for(int i = 0; i < 16; i++) {
+        for(int k = 0; k < 100; k++) {
+            plot_pixel(firework[i].curve[k].x, firework[i].curve[k].y, colour_array[rand() % 10]);
+        }
+    }*/
+}
+
+
+
+    
+    
+
