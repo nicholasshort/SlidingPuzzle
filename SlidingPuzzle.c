@@ -1104,6 +1104,7 @@ void main_menu();
 void draw_rectangle(int x, int y, int xLen, int yLen, short int line_colour);
 void draw_fireworks_background();
 void clear_characters();
+bool completed_board();
 
 int getBitCode(int num);
 
@@ -1128,7 +1129,7 @@ int blankIndex = 15;//Index of blank square
 int moveIndex = 0; //Index of last move
 
 //Game state
-char* game_state = "Play";
+char* game_state = "Menu";
 
 //Timer counter
 int timer = 0;
@@ -1165,7 +1166,7 @@ int main(){
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1);
     
-    
+    clear_characters();
     scramble(10000);
     load_fireworks();
     printf("Done precomputation");
@@ -1182,6 +1183,7 @@ int main(){
     draw_board();
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+    clear_characters();
     draw_background();
     draw_board();
     wait_for_vsync();
@@ -1189,10 +1191,20 @@ int main(){
     
     
     //Main Game Loop
+    //clear_characters();
     while(1) {
         fflush(stdout);
         
+        if(strcmp(game_state, "Menu") == 0) {
+            main_menu();
+        }
+        
+        //Checking if the game is done/won.
         if(strcmp(game_state, "Play") == 0){
+            if(completed_board()) {
+                game_state = "Win";
+            }
+            //clear_characters();
             draw_subsquare(board[moveIndex], moveIndex);
             draw_subsquare(board[blankIndex], blankIndex);
             draw_grid();
@@ -1200,11 +1212,25 @@ int main(){
             pixel_buffer_start = *(pixel_ctrl_ptr + 1);
             hexDisplay(timer);
         }
-        
+        if(strcmp(game_state, "Win") == 0) {
+            draw_fireworks_background();
+            draw_fireworks();
+            wait_for_vsync();
+            pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+        }
     }
-    
-    
 }
+
+bool completed_board() {
+    
+    for(int i = 0; i < NUM_SQUARES*NUM_SQUARES; i++) {
+        if(i != board[i]) {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+    
 
 void draw_board() {
     
