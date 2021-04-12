@@ -836,6 +836,7 @@ void swap(int *xp, int *yp);
 void draw_subsquare(int square, int board_position);
 void moveBoard(int moveDirection);
 void draw_board();
+void draw_grid();
 void KEY_ISR();
 void PS2_ISR();
 void PRIV_TIMER_ISR();
@@ -867,24 +868,25 @@ struct line {
     struct xy* curve;
 };
 
-//Board variables
-int board[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
-int blankIndex = 15;//Index of blank square
-short int colour_array[10] = {WHITE, YELLOW, RED, GREEN, GREY, BLUE, CYAN, MAGENTA, PINK, ORANGE};
-
-//Timer counter
-int timer = 0;
-
 //Pointer to memory buffer
 volatile int pixel_buffer_start;
 volatile int char_buffer_start;
 
-//Flag to draw board
-bool draw = TRUE;
+//Board variables
+int board[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+int blankIndex = 15;//Index of blank square
+int moveIndex = 0; //Index of last move
 
-//Flag to know if the game is done/win
-bool win = FALSE;
+//Game state
+char* game_state = "Play";
 
+//Timer counter
+int timer = 0;
+
+//Colour array
+short int colour_array[10] = {WHITE, YELLOW, RED, GREEN, GREY, BLUE, CYAN, MAGENTA, PINK, ORANGE};
+
+//Fireworks data structure
 struct line firework[16];
 
 
@@ -919,9 +921,11 @@ int main(){
     printf("Done precomputation");
 	
 	draw_background();
+	draw_board();
 	wait_for_vsync();
 	pixel_buffer_start = *(pixel_ctrl_ptr + 1);
 	draw_background();
+	draw_board();
 	wait_for_vsync();
 	pixel_buffer_start = *(pixel_ctrl_ptr + 1);
 	
@@ -929,30 +933,18 @@ int main(){
 	//Main Game Loop
     while(1) {
         fflush(stdout);
-           //if(draw) {
-            draw_board();
-            draw = FALSE;
-            wait_for_vsync();
-            pixel_buffer_start = *(pixel_ctrl_ptr + 1);
-           //}
-        hexDisplay(timer);
+		
+		if(strcmp(game_state, "Play") == 0){
+			draw_subsquare(board[moveIndex], moveIndex);
+			draw_subsquare(board[blankIndex], blankIndex);
+			draw_grid();
+			wait_for_vsync();
+			pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+			hexDisplay(timer);
+		}
+		
     }
     
-    clear_screen();
-    win = TRUE;
-    if(win) {
-        draw_line(100, 82, 100, 239, MAGENTA);
-        draw_line(240, 150, 240, 239, MAGENTA);
-        draw_fireworks();
-        plot_character(30, 5, 'S');
-        plot_character(31, 5, 'C');
-        plot_character(32, 5, 'O');
-        plot_character(33, 5, 'R');
-        plot_character(34, 5, 'E');
-        plot_character(35, 5, ':');
-        wait_for_vsync();
-        pixel_buffer_start = *(pixel_ctrl_ptr + 1);
-    }
     
 }
 
@@ -962,8 +954,12 @@ void draw_board() {
      for(int i = 0; i < NUM_SQUARES*NUM_SQUARES; i++) {
         draw_subsquare(board[i], i);
     }
-    //draws the grid lines
-    for(int i = 0; i < 5; i++){
+	
+	draw_grid();
+}
+
+void draw_grid(){
+	for(int i = 0; i < 5; i++){
         draw_line(50+i*55, 10, 50+i*55, 230, BLACK);
         draw_line(50, 10+i*55, 270, 10+i*55, BLACK);
     }
@@ -1085,8 +1081,8 @@ void moveBoard(int moveDirection) {
     if(moveDirection == UP) {
         //Check that blank is not on last row
         if(blankIndex <= NUM_SQUARES*NUM_SQUARES-NUM_SQUARES-1) {
-            //printf("moved up");
             swap(&board[blankIndex] , &board[blankIndex+NUM_SQUARES]);
+			moveIndex = blankIndex;
             blankIndex = blankIndex+NUM_SQUARES;
         }
     }
@@ -1094,8 +1090,8 @@ void moveBoard(int moveDirection) {
     else if(moveDirection == RIGHT) {
         //Check that blank is not on first column
         if(blankIndex % NUM_SQUARES != 0) {
-            //printf("moved right");
             swap(&board[blankIndex] , &board[blankIndex-1]);
+			moveIndex = blankIndex;
             blankIndex = blankIndex-1;
         }
     }
@@ -1103,8 +1099,8 @@ void moveBoard(int moveDirection) {
     else if(moveDirection == LEFT) {
         //Check that blank is not on last column
         if(blankIndex% NUM_SQUARES != NUM_SQUARES-1) {
-            //printf("moved left");
             swap(&board[blankIndex] , &board[blankIndex+1]);
+			moveIndex = blankIndex;
             blankIndex = blankIndex+1;
         }
     }
@@ -1112,8 +1108,8 @@ void moveBoard(int moveDirection) {
     else if(moveDirection == DOWN){
         //Check that blank is not on the first row
         if(blankIndex >= NUM_SQUARES){
-            //printf("moved down");
             swap(&board[blankIndex] , &board[blankIndex-NUM_SQUARES]);
+			moveIndex = blankIndex;
             blankIndex = blankIndex-NUM_SQUARES;
         }
     }
@@ -1209,14 +1205,12 @@ void KEY_ISR() {
     }
     
     moveBoard(move);
-    draw = TRUE; // Set draw flag to true
     *(KEY_ptr + 3) = *(KEY_ptr + 3); // Reset edgecapture
 }
 
 
 void PS2_ISR() {
     
-    draw = TRUE;
     unsigned char breakKey = 0;
     unsigned char makeKey = 0;
 
@@ -1233,7 +1227,7 @@ void PS2_ISR() {
     *(PS2_ptr + 1) = interruptReg;
     
     if (RVALID && RAVAIL == 0) {
-        
+        printf("Yeah");
         breakKey = PS2_data & 0xFF;
         PS2_data = *(PS2_ptr);
         RVALID = PS2_data & 0x8000;    // extract rvalid field
@@ -1265,8 +1259,6 @@ void PS2_ISR() {
     }
     interruptReg = *(PS2_ptr + 1);
     *(PS2_ptr + 1) = interruptReg;
-    
-    printf("\n");
 }
 
 void PRIV_TIMER_ISR(){
