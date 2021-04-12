@@ -890,9 +890,7 @@ struct line firework[16];
 
 int main(){
     
-    //scramble(10000);
-    load_fireworks();
-    printf("Done precomputation");
+    
     
     disable_A9_interrupts();
     set_A9_IRQ_stack();// initialize the stack pointer for IRQ mode
@@ -908,23 +906,28 @@ int main(){
     char_buffer_start = *(char_ctrl_ptr);
         
     *(pixel_ctrl_ptr + 1) = 0xC8000000;
-    wait_for_vsync();
+	wait_for_vsync();
     *(pixel_ctrl_ptr + 1) = 0xC0000000;
-    pixel_buffer_start = *(pixel_ctrl_ptr + 1);
-    //clear_screen();
-    draw_background();
-    draw_board();
+	pixel_buffer_start = *(pixel_ctrl_ptr + 1); 
+	draw_loading();
     wait_for_vsync();
-    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
-    //clear_screen();
-    draw_background();
-    draw_board();
-    wait_for_vsync();
-    pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+	pixel_buffer_start = *(pixel_ctrl_ptr + 1); 
     
     
-
-   /* while(1) {
+	scramble(10000);
+    load_fireworks();
+    printf("Done precomputation");
+	
+	draw_background();
+	wait_for_vsync();
+	pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+	draw_background();
+	wait_for_vsync();
+	pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+	
+	
+	//Main Game Loop
+    while(1) {
         fflush(stdout);
            //if(draw) {
             draw_board();
@@ -933,7 +936,7 @@ int main(){
             pixel_buffer_start = *(pixel_ctrl_ptr + 1);
            //}
         hexDisplay(timer);
-    }*/
+    }
     
     clear_screen();
     win = TRUE;
@@ -1285,7 +1288,7 @@ void config_KEY() {
 
 void config_PRIV_TIMER(){
     volatile int* TIMER_ptr = (int*) MPCORE_PRIV_TIMER;
-    *(TIMER_ptr) = 0x1E8480; // Have the timer count hundreths of a second
+    *(TIMER_ptr) = 0xBEBC200; // Have the timer count 1 second
     *(TIMER_ptr + 2) = 0x7; // Reset enable and interrupt mask bits
 }
 
