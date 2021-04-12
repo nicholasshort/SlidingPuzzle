@@ -957,7 +957,6 @@ const uint16_t firework_background[240][320] = {
 };
 
 
-
 /* This files provides address values that exist in the system */
 #define BOARD                 "DE1-SoC"
 
@@ -1069,7 +1068,8 @@ const uint16_t firework_background[240][320] = {
 #define SEVEN 0b00000111
 #define EIGHT 0b01111111
 #define NINE 0b01100111
-    
+
+
 
 
 void clear_screen();
@@ -1082,7 +1082,6 @@ void swap(int *xp, int *yp);
 void draw_subsquare(int square, int board_position);
 void moveBoard(int moveDirection);
 void draw_board();
-void draw_grid();
 void KEY_ISR();
 void PS2_ISR();
 void PRIV_TIMER_ISR();
@@ -1100,10 +1099,10 @@ void wait_for_vsync();
 struct xy* bezier(struct xy *points);
 void load_fireworks();
 void draw_fireworks();
-void main_menu();
 void draw_rectangle(int x, int y, int xLen, int yLen, short int line_colour);
-void draw_fireworks_background();
+void main_menu();
 void clear_characters();
+void draw_fireworks_background();
 
 int getBitCode(int num);
 
@@ -1118,25 +1117,24 @@ struct line {
     struct xy* curve;
 };
 
-//Pointer to memory buffer
-volatile int pixel_buffer_start;
-volatile int char_buffer_start;
-
 //Board variables
 int board[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 int blankIndex = 15;//Index of blank square
-int moveIndex = 0; //Index of last move
-
-//Game state
-char* game_state = "Play";
+short int colour_array[10] = {WHITE, YELLOW, RED, GREEN, GREY, BLUE, CYAN, MAGENTA, PINK, ORANGE};
 
 //Timer counter
 int timer = 0;
 
-//Colour array
-short int colour_array[10] = {WHITE, YELLOW, RED, GREEN, GREY, BLUE, CYAN, MAGENTA, PINK, ORANGE};
+//Pointer to memory buffer
+volatile int pixel_buffer_start;
+volatile int char_buffer_start;
 
-//Fireworks data structure
+//Flag to draw board
+bool draw = TRUE;
+
+//Flag to know if the game is done/win
+bool win = FALSE;
+
 struct line firework[16];
 
 
@@ -1162,6 +1160,7 @@ int main(){
     *(pixel_ctrl_ptr + 1) = 0xC0000000;
     pixel_buffer_start = *(pixel_ctrl_ptr + 1);
     draw_loading();
+    clear_characters();
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1);
     
@@ -1170,6 +1169,7 @@ int main(){
     load_fireworks();
     printf("Done precomputation");
     
+    
     main_menu();
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1);
@@ -1177,32 +1177,40 @@ int main(){
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1);
     
-    clear_characters();
+    
     draw_background();
-    draw_board();
+    clear_characters();
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1);
     draw_background();
-    draw_board();
+    clear_characters();
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1);
     
     
     //Main Game Loop
-    while(1) {
+    /*while(1) {
         fflush(stdout);
-        
-        if(strcmp(game_state, "Play") == 0){
-            draw_subsquare(board[moveIndex], moveIndex);
-            draw_subsquare(board[blankIndex], blankIndex);
-            draw_grid();
+           //if(draw) {
+            draw_board();
+            draw = FALSE;
             wait_for_vsync();
             pixel_buffer_start = *(pixel_ctrl_ptr + 1);
-            hexDisplay(timer);
-        }
-        
-    }
+           //}
+        hexDisplay(timer);
+    }*/
     
+    clear_screen();
+    draw_fireworks_background();
+    wait_for_vsync();
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+    win = TRUE;
+    if(win) {
+        draw_fireworks_background();
+        draw_fireworks();
+        wait_for_vsync();
+        pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+    }
     
 }
 
@@ -1212,11 +1220,7 @@ void draw_board() {
      for(int i = 0; i < NUM_SQUARES*NUM_SQUARES; i++) {
         draw_subsquare(board[i], i);
     }
-    
-    draw_grid();
-}
-
-void draw_grid(){
+    //draws the grid lines
     for(int i = 0; i < 5; i++){
         draw_line(50+i*55, 10, 50+i*55, 230, BLACK);
         draw_line(50, 10+i*55, 270, 10+i*55, BLACK);
@@ -1247,14 +1251,6 @@ void draw_background() {
     }
 }
 
-void draw_fireworks_background() {
-    for(int x = 0; x < RESOLUTION_X; x++) {
-        for(int y = 0; y < RESOLUTION_Y; y++) {
-            plot_pixel(x, y, firework_background[y][x]);
-        }
-    }
-}
-
 void draw_loading() {
     for(int x = 0; x < RESOLUTION_X; x++) {
         for(int y = 0; y < RESOLUTION_Y; y++) {
@@ -1263,6 +1259,21 @@ void draw_loading() {
     }
 }
 
+void draw_fireworks_background() {
+    for(int x = 0; x < RESOLUTION_X; x++) {
+        for(int y = 0; y < RESOLUTION_Y; y++) {
+            plot_pixel(x, y, firework_background[y][x]);
+        }
+    }
+}
+
+void draw_rectangle(int x, int y, int xLen, int yLen, short int line_colour){
+    for(int i = 0; i < xLen; i++) {
+        for(int j = 0; j < yLen; j++) {
+            plot_pixel(x+i, y+j, line_colour);
+        }
+    }
+}
 
 //provides template for the address of the pixel.
 void plot_pixel(int x, int y, short int line_colour) {
@@ -1315,15 +1326,6 @@ void draw_line(int x0, int y0, int x1, int y1, short int line_colour) { //contai
     }
 }
 
-void draw_rectangle(int x, int y, int xLen, int yLen, short int line_colour){
-    for(int i = 0; i < xLen; i++) {
-        for(int j = 0; j < yLen; j++) {
-            plot_pixel(x+i, y+j, line_colour);
-        }
-    }
-}
-
-
 void swap(int *xp, int *yp) {
     int temp = *xp;
     *xp = *yp;
@@ -1364,8 +1366,8 @@ void moveBoard(int moveDirection) {
     if(moveDirection == UP) {
         //Check that blank is not on last row
         if(blankIndex <= NUM_SQUARES*NUM_SQUARES-NUM_SQUARES-1) {
+            //printf("moved up");
             swap(&board[blankIndex] , &board[blankIndex+NUM_SQUARES]);
-            moveIndex = blankIndex;
             blankIndex = blankIndex+NUM_SQUARES;
         }
     }
@@ -1373,8 +1375,8 @@ void moveBoard(int moveDirection) {
     else if(moveDirection == RIGHT) {
         //Check that blank is not on first column
         if(blankIndex % NUM_SQUARES != 0) {
+            //printf("moved right");
             swap(&board[blankIndex] , &board[blankIndex-1]);
-            moveIndex = blankIndex;
             blankIndex = blankIndex-1;
         }
     }
@@ -1382,8 +1384,8 @@ void moveBoard(int moveDirection) {
     else if(moveDirection == LEFT) {
         //Check that blank is not on last column
         if(blankIndex% NUM_SQUARES != NUM_SQUARES-1) {
+            //printf("moved left");
             swap(&board[blankIndex] , &board[blankIndex+1]);
-            moveIndex = blankIndex;
             blankIndex = blankIndex+1;
         }
     }
@@ -1391,8 +1393,8 @@ void moveBoard(int moveDirection) {
     else if(moveDirection == DOWN){
         //Check that blank is not on the first row
         if(blankIndex >= NUM_SQUARES){
+            //printf("moved down");
             swap(&board[blankIndex] , &board[blankIndex-NUM_SQUARES]);
-            moveIndex = blankIndex;
             blankIndex = blankIndex-NUM_SQUARES;
         }
     }
@@ -1488,12 +1490,14 @@ void KEY_ISR() {
     }
     
     moveBoard(move);
+    draw = TRUE; // Set draw flag to true
     *(KEY_ptr + 3) = *(KEY_ptr + 3); // Reset edgecapture
 }
 
 
 void PS2_ISR() {
     
+    draw = TRUE;
     unsigned char breakKey = 0;
     unsigned char makeKey = 0;
 
@@ -1510,7 +1514,7 @@ void PS2_ISR() {
     *(PS2_ptr + 1) = interruptReg;
     
     if (RVALID && RAVAIL == 0) {
-        printf("Yeah");
+        
         breakKey = PS2_data & 0xFF;
         PS2_data = *(PS2_ptr);
         RVALID = PS2_data & 0x8000;    // extract rvalid field
@@ -1542,6 +1546,8 @@ void PS2_ISR() {
     }
     interruptReg = *(PS2_ptr + 1);
     *(PS2_ptr + 1) = interruptReg;
+    
+    printf("\n");
 }
 
 void PRIV_TIMER_ISR(){
@@ -1989,24 +1995,81 @@ void load_fireworks() {
     
 void draw_fireworks() {
     
-    for(int i = 0; i < 100; i++) {
-        plot_pixel(firework[0].curve[i].x, firework[0].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[1].curve[i].x, firework[1].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[2].curve[i].x, firework[2].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[3].curve[i].x, firework[3].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[4].curve[i].x, firework[4].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[5].curve[i].x, firework[5].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[6].curve[i].x, firework[6].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[7].curve[i].x, firework[7].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[8].curve[i].x, firework[8].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[9].curve[i].x, firework[9].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[10].curve[i].x, firework[10].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[11].curve[i].x, firework[11].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[12].curve[i].x, firework[12].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[13].curve[i].x, firework[13].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[14].curve[i].x, firework[14].curve[i].y, colour_array[rand() % 10]);
-        plot_pixel(firework[15].curve[i].x, firework[15].curve[i].y, colour_array[rand() % 10]);
+    clear_characters();
+    volatile int * pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL_BASE;
+    *(pixel_ctrl_ptr) = 0xC8000000;
+    *(pixel_ctrl_ptr + 1) = 0xC8000000;
+    pixel_buffer_start = *(pixel_ctrl_ptr);
+    
+    
+    //draw_line(100, 82, 100, 239, MAGENTA);
+    //draw_line(240, 150, 240, 239, MAGENTA);
+    for(int i = 240; i >= 82; i--) {
+        plot_pixel(100, i, MAGENTA);
+        wait_for_vsync();
     }
+    
+    for(int i = 0; i < 100; i++) {
+        for(int k = 0; k < 5; k++) {
+            for(int j = 0; j < 8; j++) {
+                plot_pixel(firework[j].curve[i].x, firework[j].curve[i].y, colour_array[rand() % 10]);
+            }
+        }
+        wait_for_vsync();
+    }
+    
+    for(int i = 240; i >= 150; i--) {
+        plot_pixel(240, i, MAGENTA);
+        wait_for_vsync();
+    }
+    
+    for(int i = 0; i < 100; i++) {
+        for(int k = 0; k < 5; k++) {
+            for(int j = 8; j < 16; j++) {
+                plot_pixel(firework[j].curve[i].x, firework[j].curve[i].y, colour_array[rand() % 10]);
+            }
+        }
+        wait_for_vsync();
+    }
+    
+    plot_character(36, 8, 'W');
+    plot_character(37, 8, 'E');
+    plot_character(38, 8, 'L');
+    plot_character(39, 8, 'L');
+    plot_character(40, 8, ' ');
+    plot_character(41, 8, 'D');
+    plot_character(42, 8, 'O');
+    plot_character(43, 8, 'N');
+    plot_character(44, 8, 'E');
+    plot_character(45, 8, '!');
+    
+    plot_character(29, 10, 'P');
+    plot_character(30, 10, 'U');
+    plot_character(31, 10, 'S');
+    plot_character(32, 10, 'H');
+    plot_character(33, 10, ' ');
+    plot_character(34, 10, '0');
+    plot_character(35, 10, ' ');
+    plot_character(36, 10, 'T');
+    plot_character(37, 10, '0');
+    plot_character(38, 10, ' ');
+    plot_character(39, 10, 'R');
+    plot_character(40, 10, 'E');
+    plot_character(41, 10, 'T');
+    plot_character(42, 10, 'U');
+    plot_character(43, 10, 'R');
+    plot_character(44, 10, 'N');
+    plot_character(45, 10, ' ');
+    plot_character(46, 10, 'T');
+    plot_character(47, 10, 'O');
+    plot_character(48, 10, ' ');
+    plot_character(49, 10, 'M');
+    plot_character(50, 10, 'E');
+    plot_character(51, 10, 'N');
+    plot_character(52, 10, 'U');
+    
+
+    
 }
 
 void main_menu() {
@@ -2064,7 +2127,7 @@ void main_menu() {
     plot_character(43, 24, 'O');
     plot_character(44, 24, 'N');
     plot_character(45, 24, ' ');
-    plot_character(46, 24, '0');
+    plot_character(46, 24, '1');
     plot_character(47, 24, ':');
     plot_character(48, 24, ' ');
     plot_character(33, 26, 'T');
@@ -2101,7 +2164,7 @@ void main_menu() {
     plot_character(43, 39, 'O');
     plot_character(44, 39, 'N');
     plot_character(45, 39, ' ');
-    plot_character(46, 39, '1');
+    plot_character(46, 39, '2');
     plot_character(47, 39, ':');
     plot_character(48, 39, ' ');
     
@@ -2173,16 +2236,12 @@ void main_menu() {
     
     
 
-
-
-    
-    
-
-
     
     
     
     
     
     
-
+    
+    
+    
