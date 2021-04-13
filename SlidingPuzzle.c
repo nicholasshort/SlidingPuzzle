@@ -2081,12 +2081,12 @@ void PS2_ISR() {
     unsigned char makeKey = 0;
 
     volatile int *PS2_ptr = (int *) PS2_BASE;
-    int PS2_data, RVALID, RAVAIL;
+    int data, RVALID, RAVAIL;
     
-    PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
+    data = *(PS2_ptr); // read the Data register in the PS/2 port
     
-    RVALID = PS2_data & 0x8000;    // extract rvalid field
-    RAVAIL = PS2_data & 0xFFFF0000; // extract ravail field
+    RVALID = data & 0x8000;    // extract rvalid field
+    RAVAIL = data & 0xFFFF0000; // extract ravail field
     
     int interruptReg;
     interruptReg = *(PS2_ptr + 1);
@@ -2094,16 +2094,16 @@ void PS2_ISR() {
     
     if (RVALID && RAVAIL == 0) {
         printf("Yeah");
-        breakKey = PS2_data & 0xFF;
-        PS2_data = *(PS2_ptr);
-        RVALID = PS2_data & 0x8000;    // extract rvalid field
-        RAVAIL = PS2_data & 0xFFFF0000; // extract ravail field
+        breakKey = data & 0xFF;
+        data = *(PS2_ptr);
+        RVALID = data & 0x8000;    // extract rvalid field
+        RAVAIL = data & 0xFFFF0000; // extract ravail field
 
         if (breakKey == (char)0xF0){ // Check for break code
-            PS2_data = *(PS2_ptr);
-            RVALID = PS2_data & 0x8000;    // extract rvalid field
-            RAVAIL = PS2_data & 0xFFFF0000; // extract ravail field
-            makeKey = PS2_data & 0xFF; // extract make key
+            data = *(PS2_ptr);
+            RVALID = data & 0x8000;    // extract rvalid field
+            RAVAIL = data & 0xFFFF0000; // extract ravail field
+            makeKey = data & 0xFF; // extract make key
             
             if(makeKey == (char)0x1D) {
                 moveBoard(UP);
