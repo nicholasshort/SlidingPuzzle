@@ -1493,9 +1493,6 @@ const uint16_t iron_man[220][220] = {
 #define SHADOW 0X4000
     
 /* Screen size. */
-#define BOARD_SIZE 220
-#define SQUARE_SIZE 55
-#define NUM_SQUARES 4
 #define RESOLUTION_X 320
 #define RESOLUTION_Y 240
 #define CHARACTER_X 80
@@ -1529,6 +1526,7 @@ const uint16_t iron_man[220][220] = {
 #define NINE 0b01100111
     
 
+	
 /* FUNCTION DECLARATIONS */
 void clear_screen();
 void draw_background();
@@ -1581,12 +1579,18 @@ struct line {
     struct xy* curve;
 };
 
+//Board properties
+int BOARD_SIZE = 220;
+int SQUARE_SIZE = 55;
+int NUM_SQUARES = 4;
+
 //Pointer to memory buffer
 volatile int pixel_buffer_start;
 volatile int char_buffer_start;
 
 //Board variables
-int board[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+char* pixelBoard;
+int* board;
 int blankIndex = 15;//Index of blank square
 int moveIndex = 0; //Index of last move
 
@@ -1633,7 +1637,6 @@ int main(){
     
     hexDisplay(0); //resets timer
     clear_characters(); //resets character
-    scramble(10000);
     load_fireworks();
     printf("Done precomputation");
     
@@ -1704,9 +1707,7 @@ int main(){
             wait_for_vsync();
             pixel_buffer_start = *(pixel_ctrl_ptr + 1);
         }
-        if(strcmp(game_state, "AI") == 0) {
-            //Add code for AI here
-        }
+
     }
 }
 
@@ -1733,8 +1734,8 @@ void draw_board() {
 
 void draw_grid(){
     for(int i = 0; i < 5; i++){
-        draw_line(50+i*55, 10, 50+i*55, 230, BLACK);
-        draw_line(50, 10+i*55, 270, 10+i*55, BLACK);
+        draw_line(50+i*SQUARE_SIZE, 10, 50+i*SQUARE_SIZE, 230, BLACK);
+        draw_line(50, 10+i*SQUARE_SIZE, 270, 10+i*SQUARE_SIZE, BLACK);
     }
 }
 
@@ -1861,12 +1862,17 @@ void draw_subsquare(int square, int board_position) {
     
     for(int i = 0; i < SQUARE_SIZE; i++) {
         for(int j = 0; j < SQUARE_SIZE; j++) {
-            if(square == 15) {
+            if(square == NUM_SQUARES*NUM_SQUARES-1) {
                 plot_pixel(j+screen_offset_X+50, i+screen_offset_Y+10, BLACK);
             }
             else {
-                plot_pixel(j+screen_offset_X+50, i+screen_offset_Y+10, full_ghost[i+square_offset_Y][j+square_offset_X]);
-            }
+				if(strcmp(pixelBoard, "Mario") == 0)
+                	plot_pixel(j+screen_offset_X+50, i+screen_offset_Y+10, mario_and_luigi[i+square_offset_Y][j+square_offset_X]);
+            	else if(strcmp(pixelBoard, "Iron Man") == 0)
+					plot_pixel(j+screen_offset_X+50, i+screen_offset_Y+10, iron_man[i+square_offset_Y][j+square_offset_X]);
+				else if(strcmp(pixelBoard, "Ghost") == 0)
+					plot_pixel(j+screen_offset_X+50, i+screen_offset_Y+10, full_ghost[i+square_offset_Y][j+square_offset_X]);
+			}
         }
     }
 }
@@ -1992,15 +1998,38 @@ int getBitCode(int num) {
 void KEY_ISR() {
     
     volatile int* KEY_ptr = (int*) KEY_BASE;
-   
     if(game_state == "Menu") {
         clear_characters();
         switch(*(KEY_ptr + 3)){ // Get edgecapture bits (could take log base 2);
-            case 2: game_state = "Play"; //push button 1
+            case 2: NUM_SQUARES = 4;
+					game_state = "Play"; //push button 1
                     break;
-            case 4: game_state = "AI"; //push button 2
+            case 4: NUM_SQUARES = 5;
+					game_state = "Play"; //push button 2
                     break;
         }
+		switch(rand() % 3){
+			case 0: pixelBoard = "Mario";
+					break;
+			case 1: pixelBoard = "Iron Man";
+					break;
+			case 2: pixelBoard = "Ghost";
+					break;
+		}
+		if(*(KEY_ptr + 3) == 2 || *(KEY_ptr + 3) == 4){
+			print("BD\n");
+			SQUARE_SIZE = BOARD_SIZE/NUM_SQUARES;
+			board = (int*)malloc(sizeof(int)*NUM_SQUARES*NUM_SQUARES);
+			for(int i = 0; i < NUM_SQUARES*NUM_SQUARES; i++){
+				board[i] = i;
+			}
+			scramble(10000);
+			for(int i = 0; i < NUM_SQUARES*NUM_SQUARES; i++){
+				if(board[i] == NUM_SQUARES*NUM_SQUARES-1)
+					blankIndex = i;
+			}
+			timer = 0;
+		}
     }
     else if(game_state == "Play") {
         clear_characters();
@@ -2641,11 +2670,7 @@ void main_menu() {
 
 void draw_quit() {
     
-    for(int x = 0; x < RESOLUTION_X; x++) {
-        for(int y = 0; y < RESOLUTION_Y; y++) {
-            plot_pixel(x, y, BLACK);
-        }
-    }
+    draw_background();
     draw_line(20, 20, 20,  220, WHITE);
     draw_line(20, 20, 300, 20, WHITE);
     draw_line(300, 20, 300, 220, WHITE);
