@@ -13,6 +13,8 @@ The game has multiple game modes and celebratory animation for when the user win
 - Keyboard input for tile usage
 - Interrupts for signal processing. 
 
+![](images/firstphoto.png)
+
 # To play Sliding Puzzle Game...
 
 <br>The game starts with a loading screen displayed on the VGA while the program precomputes some animation data. <b>Controls of the game for moving the tiles are the WASD keys.</b></br>
