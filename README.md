@@ -1,5 +1,16 @@
-# SlidingPuzzleGame
+# Sliding Puzzle Game
 
-Final Project for 243 - Computer Organization
+<br>A sliding puzzle game to be implemented on a DE1-SoC Computer. Source code included in the repository. </br>
+CPUlator can also be used to load the game: https://cpulator.01xz.net/?sys=arm-de1soc
 
-Developed a sliding puzzle game to be implemented on a DE1-SoC Computer. The game has multiple game modes and celebratory animation for when the user wins. A timer is used to track how long it takes the user to complete the puzzle. Makes use of the A9 private timer, the Hex Displays, and interrupts. 
+<br><b>Developers:</b> Paula Perdomo and Nicholas Short </br>
+<b>ECE243 Computer Organization - 2021 Academic Year </b>
+
+The game has multiple game modes and celebratory animation for when the user wins. Makes use of the:
+- VGA display for game graphics.
+- A9 private timer to track the user duration. 
+- Hex Displays for timer display.
+- Keyboard input for tile usage
+- Interrupts for signal processing. 
+
+
